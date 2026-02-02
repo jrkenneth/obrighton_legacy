@@ -6,14 +6,14 @@
 	if(isset($_GET['id'])){
 		$target_id = $_GET['id'];
 		$target_name = $_GET['view_target'];
-		$target_source = $_GET['source'];
+		$target_source = $_GET['source'] ?? '';
 	}
 
 	if(!isset($_GET['target'])){
 		$_SESSION['redirect_url'] = basename($_SERVER['REQUEST_URI']);
 	}
 
-	if($target_source == "view-details"){
+	if(($target_source ?? '') == "view-details"){
 		$back_url_display="none";
 	}else{
 		$back_url_display = "block";
