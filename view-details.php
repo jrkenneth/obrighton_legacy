@@ -4,8 +4,8 @@
 	include("_include/header.php");
 
 	if(isset($_GET['id'])){
-		$target_id = $_GET['id'];
-		$target_name = $_GET['view_target'];
+		$target_id = $_GET['id'] ?? '';
+		$target_name = $_GET['view_target'] ?? '';
 		$target_source = $_GET['source'] ?? '';
 	}
 
