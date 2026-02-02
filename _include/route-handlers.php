@@ -85,43 +85,76 @@
         echo "<script>window.location='login.php';</script>";
     }
 
-    //login
+    //login - PHASE 3: Secure Login Handler
     if( isset($_POST['login']) ){
-        $user=$_POST['user'];
-        $password=$_POST['password'];	
-        
-        $login_query="SELECT * FROM users WHERE email='".$user."' or user_id='".$user."'";
-        $run_lq=mysqli_query($con, $login_query);
-        $row=mysqli_fetch_array($run_lq);
-        $count_lq_rows = mysqli_num_rows($run_lq);
-                
-        if($count_lq_rows == 1) 
-        {
-            $id = $row['id'];
-            $this_password = $row['password'];
-            $dashboard_access = $row['dashboard_access'];
-            $first_name = $row['first_name'];
+        // SECURITY: Validate CSRF token first
+        if(!CSRFProtection::checkToken($_POST['csrf_token'] ?? '')){
+            AuditLog::log('LOGIN_CSRF_FAILED', null, $_POST['user'] ?? 'unknown', array('reason' => 'Invalid CSRF token'), 'CRITICAL');
+            $message = "<span class='text-danger'>Security check failed. Please try logging in again.</span>";
+        } else {
+            // SECURITY: Input validation
+            $user = InputValidator::sanitizeText($_POST['user'] ?? '');
+            $password = $_POST['password'] ?? '';
             
-            if($dashboard_access == "1"){
-                if(password_verify($password, $this_password)){
-                    $_SESSION['this_user'] = $id;
-                    $date_time = date("Y-m-d H:i:s");
-
-                    $update_last_login = "update users set last_login='".$date_time."' where id='".$id."'";
-                    $run_ull = mysqli_query($con, $update_last_login);
-
-                    $message = "<span class='text-success'>Login attempt successful, Welcome ".$first_name."!</span>";
-                    echo "<meta http-equiv='refresh' content='3; url=index.php' >";
-                }else{
-                    $message = "<span class='text-danger'>Login attempt failed. Incorrect password provided, try again.</span>";
+            // SECURITY: Validate username/email format
+            if(empty($user) || empty($password)){
+                $message = "<span class='text-danger'>Login attempt failed. Email/Username and password are required.</span>";
+            } elseif(strlen($password) < 1){
+                $message = "<span class='text-danger'>Login attempt failed. Invalid password format.</span>";
+            } else {
+                // SECURITY: Use prepared statement to prevent SQL injection
+                $stmt = $con->prepare("SELECT id, password, dashboard_access, first_name, role_id FROM users WHERE email=? OR user_id=?");
+                if($stmt === false){
+                    AuditLog::log('LOGIN_QUERY_FAILED', null, $user, array('reason' => 'Prepare failed: ' . $con->error), 'ERROR');
+                    $message = "<span class='text-danger'>Login system error. Please try again later.</span>";
+                } else {
+                    $stmt->bind_param("ss", $user, $user);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    
+                    if($result->num_rows == 1){
+                        $row = $result->fetch_array();
+                        $id = intval($row['id']);
+                        $this_password = $row['password'];
+                        $dashboard_access = $row['dashboard_access'];
+                        $first_name = $row['first_name'];
+                        
+                        if($dashboard_access == "1"){
+                            if(password_verify($password, $this_password)){
+                                $_SESSION['this_user'] = $id;
+                                $date_time = date("Y-m-d H:i:s");
+                                
+                                // SECURITY: Use prepared statement for update
+                                $update_stmt = $con->prepare("UPDATE users SET last_login=? WHERE id=?");
+                                $update_stmt->bind_param("si", $date_time, $id);
+                                $update_stmt->execute();
+                                $update_stmt->close();
+                                
+                                // SECURITY: Log successful login
+                                AuditLog::log('LOGIN_SUCCESS', null, $id, array('user' => $user, 'timestamp' => $date_time), 'INFO');
+                                
+                                $message = "<span class='text-success'>Login attempt successful, Welcome ".$first_name."!</span>";
+                                echo "<meta http-equiv='refresh' content='3; url=index.php' >";
+                            } else {
+                                // SECURITY: Log failed password attempt
+                                AuditLog::log('LOGIN_FAILED_PASSWORD', null, $user, array('reason' => 'Password mismatch', 'timestamp' => date('Y-m-d H:i:s')), 'WARNING');
+                                $message = "<span class='text-danger'>Login attempt failed. Incorrect password provided, try again.</span>";
+                            }
+                        } elseif($dashboard_access == "0"){
+                            AuditLog::log('LOGIN_FAILED_INACTIVE', null, $user, array('reason' => 'Account not activated'), 'WARNING');
+                            $message = "<span class='text-danger'>Login attempt failed. Account not activated.<br> Check your email for activation link.</span>";
+                        } elseif($dashboard_access == "2"){
+                            AuditLog::log('LOGIN_FAILED_SUSPENDED', null, $user, array('reason' => 'Account suspended'), 'WARNING');
+                            $message = "<span class='text-danger'>This account has been suspended!<br> Contact Admin at <a href='tel:+2349041243809' style='font-weight: bold;' class='text-primary'>(+234)904-124-3809</a> for more details.</span>";
+                        }
+                    } else {
+                        // SECURITY: Log user not found attempt
+                        AuditLog::log('LOGIN_FAILED_NOTFOUND', null, $user, array('reason' => 'User not found', 'timestamp' => date('Y-m-d H:i:s')), 'WARNING');
+                        $message = "<span class='text-danger'>Login attempt failed. User not found, try again.</span>";
+                    }
+                    $stmt->close();
                 }
-            }elseif($dashboard_access == "0"){
-                $message = "<span class='text-danger'>Login attempt failed. Account not activated.<br> Check your email for activation link.</span>";
-            }elseif($dashboard_access == "2"){
-                $message = "<span class='text-danger'>This account has been suspended!<br> Contact Admin at <a href='tel:+2349041243809' style='font-weight: bold;' class='text-primary'>(+234)904-124-3809</a> for more details.</span>";
             }
-        }else{
-            $message = "<span class='text-danger'>Login attempt failed. User not found, try again.</span>";
         }
     }	
 
@@ -2165,7 +2198,26 @@
         
         //delete tenant
         if($target == "delete-tenant"){
-            $target_id = $_GET['id'];
+            // EMERGENCY FIX: Validate input and check role
+            $target_id = intval($_GET['id']);
+            if ($target_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid tenant ID';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Only admins and editors can delete tenants
+            if ($tu_role_id != "1" && $tu_role_id != "2") {
+                error_log("UNAUTHORIZED DELETE ATTEMPT: User {$this_user} ({$tu_role_id}) tried to delete tenant {$target_id} from IP {$_SERVER['REMOTE_ADDR']}");
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'You do not have permission to delete tenants';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Log the deletion attempt
+            error_log("DELETE_TENANT: User={$this_user} TenantID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
             //delete tenant from DB
             $delete_tenant = "delete from tenants where id='".$target_id."'";
@@ -2200,7 +2252,26 @@
 
         //delete property
         if($target == "delete-property"){
-            $target_id = $_GET['id'];
+            // EMERGENCY FIX: Validate input and check role
+            $target_id = intval($_GET['id']);
+            if ($target_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid property ID';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Only editors can delete properties
+            if ($tu_role_id != "1" && $tu_role_id != "2") {
+                error_log("UNAUTHORIZED DELETE ATTEMPT: User {$this_user} ({$tu_role_id}) tried to delete property {$target_id} from IP {$_SERVER['REMOTE_ADDR']}");
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'You do not have permission to delete properties';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Log the deletion attempt
+            error_log("DELETE_PROPERTY: User={$this_user} PropertyID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
             //delete property from DB
             $delete_property = "delete from properties where id='".$target_id."'";
@@ -2266,7 +2337,26 @@
 
         //delete landlord
         if($target == "delete-landlord"){
-            $target_id = $_GET['id'];
+            // EMERGENCY FIX: Validate input and check role
+            $target_id = intval($_GET['id']);
+            if ($target_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid landlord ID';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Only editors can delete landlords
+            if ($tu_role_id != "1" && $tu_role_id != "2") {
+                error_log("UNAUTHORIZED DELETE ATTEMPT: User {$this_user} ({$tu_role_id}) tried to delete landlord {$target_id} from IP {$_SERVER['REMOTE_ADDR']}");
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'You do not have permission to delete landlords';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Log the deletion attempt
+            error_log("DELETE_LANDLORD: User={$this_user} LandlordID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
             //delete landlord from DB
             $delete_landlord = "delete from landlords where id='".$target_id."'";
@@ -2339,7 +2429,26 @@
         
         //delete artisan
         if($target == "delete-artisan"){
-            $target_id = $_GET['id'];
+            // EMERGENCY FIX: Validate input and check role
+            $target_id = intval($_GET['id']);
+            if ($target_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid service provider ID';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Only admins and editors can delete artisans
+            if ($tu_role_id != "1" && $tu_role_id != "2") {
+                error_log("UNAUTHORIZED DELETE ATTEMPT: User {$this_user} ({$tu_role_id}) tried to delete artisan {$target_id} from IP {$_SERVER['REMOTE_ADDR']}");
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'You do not have permission to delete service providers';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Log the deletion attempt
+            error_log("DELETE_ARTISAN: User={$this_user} ArtisanID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
             //delete artisan from DB
             $delete_artisan = "delete from artisans where id='".$target_id."'";
@@ -2377,7 +2486,26 @@
 
         //delete service type
         if($target == "delete-s-type"){
-            $target_id = $_GET['id'];
+            // EMERGENCY FIX: Validate input and check role
+            $target_id = intval($_GET['id']);
+            if ($target_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid service ID';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Only admins and editors can delete services
+            if ($tu_role_id != "1" && $tu_role_id != "2") {
+                error_log("UNAUTHORIZED DELETE ATTEMPT: User {$this_user} ({$tu_role_id}) tried to delete service {$target_id} from IP {$_SERVER['REMOTE_ADDR']}");
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'You do not have permission to delete services';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Log the deletion attempt
+            error_log("DELETE_SERVICE: User={$this_user} ServiceID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
             //delete service type from DB
             $delete_service_type = "delete from all_services where id='".$target_id."'";
@@ -2476,7 +2604,26 @@
 
         //delete user
         if($target == "delete-user"){
-            $target_id = $_GET['id'];
+            // EMERGENCY FIX: Validate input and check role
+            $target_id = intval($_GET['id']);
+            if ($target_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid user ID';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Only admins can delete users
+            if ($tu_role_id != "1") {
+                error_log("UNAUTHORIZED DELETE ATTEMPT: User {$this_user} ({$tu_role_id}) tried to delete user {$target_id} from IP {$_SERVER['REMOTE_ADDR']}");
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Only admins can delete user accounts';
+                $_SESSION['expire'] = time() + 10;
+                exit;
+            }
+            
+            // Log the deletion attempt
+            error_log("DELETE_USER: User={$this_user} TargetID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
             //delete users profile image
             $get_target_user="SELECT * FROM users where id='".$target_id."'";

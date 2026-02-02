@@ -56,6 +56,7 @@
 							<p><?php echo $message; ?></p>
 						</div>
 						<form method="POST">
+							<?php CSRFProtection::tokenField(); // SECURITY: Phase 4 - CSRF Protection ?>
 							<div class="mb-4">
 								<label class="mb-1 text-dark">Email/User ID</label>
 								<input type="text" name="user" value="<?php echo $user; ?>" class="form-control" placeholder="Enter your Email address or User ID" required>
