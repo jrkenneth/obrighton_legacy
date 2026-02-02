@@ -66,6 +66,7 @@
 								<div class="tab-content">
 									<div id="v-pills-home1" class="tab-pane fade active show"><!-- Property -->
 										<form method="post"> 	
+											<?php CSRFProtection::tokenField(); // SECURITY: Phase 4 - CSRF Protection ?>
 											<div class="d-flex justify-content-between align-items-center mb-4">
 												<div class="d-flex align-items-center">
 													<button class="btn btn-secondary btn-sm ms-2" type="submit" name="update_property_access">Update Changes</button>

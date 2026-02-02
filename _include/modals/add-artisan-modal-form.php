@@ -8,6 +8,7 @@
 	<div class="offcanvas-body">
 	<div class="container-fluid">
 		<form method="POST" enctype="multipart/form-data">
+			<?php CSRFProtection::tokenField(); // SECURITY: Phase 4 - CSRF Protection ?>
 			<div class="row">
 				<div class="col-xl-6 mb-3">
 					<label for="first_name" class="form-label">First Name<span class="text-danger">*</span></label>

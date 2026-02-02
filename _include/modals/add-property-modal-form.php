@@ -88,6 +88,7 @@
 	<div class="offcanvas-body">
 		<div class="container-fluid">
 			<form method="POST" enctype="multipart/form-data">
+				<?php CSRFProtection::tokenField(); // SECURITY: Phase 4 - CSRF Protection ?>
 				<div class="row">
 					<div class="col-xl-12 mb-3">
 						<section class="col-xl-12" style="float: left; border: 1px solid #e3e6e4; border-radius: 5px; padding: 10px;">

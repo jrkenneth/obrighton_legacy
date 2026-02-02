@@ -124,6 +124,7 @@ if($target == "update-property"){
             <div class="card-body">
                 <div class="basic-form">
                     <form method="POST" enctype="multipart/form-data">
+                        <?php CSRFProtection::tokenField(); // SECURITY: Phase 4 - CSRF Protection ?>
                         <div class="row">
                             <div class="col-xl-6 mb-3">
                                 <label for="landlord" class="form-label">Landlord<span class="text-danger">*</span></label>
