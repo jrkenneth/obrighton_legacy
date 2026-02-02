@@ -1,0 +1,164 @@
+# O.BRIGHTON Property Management System - .gitignore
+
+# ========================================
+# User Uploaded Files (DO NOT COMMIT)
+# ========================================
+file_uploads/landlords/*
+file_uploads/listings_media/*
+file_uploads/tenants/*
+file_uploads/tickets_media/*
+file_uploads/users/*
+
+# Keep the upload directories but ignore their contents
+!file_uploads/landlords/.gitkeep
+!file_uploads/listings_media/.gitkeep
+!file_uploads/tenants/.gitkeep
+!file_uploads/tickets_media/.gitkeep
+!file_uploads/users/.gitkeep
+
+# Tenant and landlord file uploads
+tenant/file_uploads/*
+!tenant/file_uploads/.gitkeep
+
+# ========================================
+# Database Configuration (SENSITIVE)
+# ========================================
+_include/dbconnect.php
+
+# ========================================
+# Log Files
+# ========================================
+*.log
+error_log
+_include/error_log
+landlord/error_log
+tenant/error_log
+
+# ========================================
+# Operating System Files
+# ========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+.nfs*
+
+# ========================================
+# IDE and Editor Files
+# ========================================
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PHPStorm / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# NetBeans
+nbproject/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# Eclipse
+.project
+.buildpath
+.settings/
+*.launch
+
+# ========================================
+# Backup Files
+# ========================================
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+*.tmp
+*.temp
+
+# ========================================
+# PHP Specific
+# ========================================
+composer.phar
+composer.lock
+/vendor/
+phpunit.xml
+
+# ========================================
+# Cache and Temporary Files
+# ========================================
+cache/
+temp/
+tmp/
+*.cache
+
+# ========================================
+# Environment and Configuration
+# ========================================
+.env
+.env.local
+.env.*.local
+config.local.php
+
+# ========================================
+# Security
+# ========================================
+*.pem
+*.key
+*.crt
+*.p12
+
+# ========================================
+# Version Control
+# ========================================
+.svn/
+.hg/
+.bzr/
+CVS/
