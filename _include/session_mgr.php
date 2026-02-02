@@ -4,11 +4,29 @@
         require_once '_include/dbconnect.php';
         date_default_timezone_set("Africa/Lagos");
     }
+    
+    // Load security libraries
+    require_once '_include/DatabaseHelper.php';
+    require_once '_include/InputValidator.php';
+    require_once '_include/CSRFProtection.php';
+    require_once '_include/Authorization.php';
+    require_once '_include/AuditLog.php';
+    
+    // Initialize security systems
+    $db = new DatabaseHelper($con);
+    AuditLog::initialize($db);
+    CSRFProtection::initialize();
        
     if(!isset($_SESSION['this_user'])){
         echo "<script>window.location='login.php';</script>";	
     }else{	
-        $this_user = $_SESSION['this_user'];
+        $this_user = InputValidator::validateInteger($_SESSION['this_user']);
+        
+        if (!$this_user) {
+            unset($_SESSION['this_user']);
+            echo "<script>window.location='login.php';</script>";
+            exit;
+        }
 
         $get_user = "select * from users where id='".$this_user."'";
         $gu_result = $con->query($get_user);
@@ -53,4 +71,6 @@
         }elseif($tu_role_id == "3"){
             $tu_role = "AGENT";
         }
-    }
+        
+        // Initialize Authorization system with current user
+        Authorization::initialize($db, $row);
