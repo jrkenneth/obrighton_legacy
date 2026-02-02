@@ -20,6 +20,15 @@ class DatabaseHelper {
     public function __construct($mysqli_connection) {
         $this->conn = $mysqli_connection;
     }
+
+    /**
+     * Get raw mysqli connection
+     *
+     * @return mysqli
+     */
+    public function getConnection() {
+        return $this->conn;
+    }
     
     /**
      * SELECT Query with Prepared Statements

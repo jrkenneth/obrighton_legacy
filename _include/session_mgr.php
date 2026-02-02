@@ -74,3 +74,5 @@
         
         // Initialize Authorization system with current user
         Authorization::initialize($db, $row);
+    }
+?>

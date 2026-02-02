@@ -244,6 +244,8 @@
                     $stmt->close();
                 }
 
+            }
+
             $response = "success";
             $message = "Changes updated successfully.";
 
@@ -458,26 +460,49 @@
                     // PHASE 5: Log user creation
                     AuditLog::log('USER_CREATED', null, $inserted_id, array('email' => $email_address, 'role' => $role, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
 
-                if(!empty($profile_picture)){
-                    $ifile_tmp=$_FILES['profile_picture']['tmp_name'];
-                    move_uploaded_file($ifile_tmp, "file_uploads/users/".$profile_picture);
-                }
+                    if(!empty($profile_picture)){
+                        $ifile_tmp=$_FILES['profile_picture']['tmp_name'];
+                        move_uploaded_file($ifile_tmp, "file_uploads/users/".$profile_picture);
+                    }
 
-                if ($host != "localhost:8888" && !empty($email_address)) {
-                    //send user a welcome email with link to set password
-                    
-                    $sender_mail = "no-reply@obrightonempire.com";
-                    $sender_name = "O.BRIGHTON EMPIRE LIMITED";
-                    $receiver_mail = $email_address;
-                    $receiver_name = $first_name." ".$last_name;
+                    if ($host != "localhost:8888" && !empty($email_address)) {
+                        //send user a welcome email with link to set password
+                        
+                        $sender_mail = "no-reply@obrightonempire.com";
+                        $sender_name = "O.BRIGHTON EMPIRE LIMITED";
+                        $receiver_mail = $email_address;
+                        $receiver_name = $first_name." ".$last_name;
 
-                    include("emails/new-user-email.php");
+                        include("emails/new-user-email.php");
 
-                    $email_sent = sendMail($sender_mail, $sender_name, $receiver_mail, $receiver_name, $this_subject, $this_body);
+                        $email_sent = sendMail($sender_mail, $sender_name, $receiver_mail, $receiver_name, $this_subject, $this_body);
  
-                    if ($email_sent === 1) {
-                        $response = "success";
-                        $message = "User account created. Activation email has been sent successfully to <u>".$receiver_mail."</u>.";
+                        if ($email_sent === 1) {
+                            $response = "success";
+                            $message = "User account created. Activation email has been sent successfully to <u>".$receiver_mail."</u>.";
+                        
+                            $_SESSION['response'] = $response;
+                            $_SESSION['message'] = $message;
+                        
+                            $res_sess_duration = 5;
+                            $_SESSION['expire'] = time() + $res_sess_duration;
+
+                            echo "<script>window.location='manage-users.php';</script>";
+                        } elseif ($email_sent === 2) {
+                            $response = "success";
+                            $message = "User account created but something went wrong when sending activation email. Copy and share this link with this user to activate their account: <u>https://portal.obrightonempire.com/login.php?set-password=true&user-id=".$user_id."</u>.";
+                        
+                            $_SESSION['response'] = $response;
+                            $_SESSION['message'] = $message;
+                        
+                            $res_sess_duration = 10;
+                            $_SESSION['expire'] = time() + $res_sess_duration;
+
+                            echo "<script>window.location='manage-users.php';</script>";
+                        }
+                    }else{
+                        $response = "error";
+                        $message = "User account created successfully.";
                     
                         $_SESSION['response'] = $response;
                         $_SESSION['message'] = $message;
@@ -485,40 +510,18 @@
                         $res_sess_duration = 5;
                         $_SESSION['expire'] = time() + $res_sess_duration;
 
-                        echo "<script>window.location='manage-users.php';</script>";
-                    } elseif ($email_sent === 2) {
-                        $response = "success";
-                        $message = "User account created but something went wrong when sending activation email. Copy and share this link with this user to activate their account: <u>https://portal.obrightonempire.com/login.php?set-password=true&user-id=".$user_id."</u>.";
-                    
-                        $_SESSION['response'] = $response;
-                        $_SESSION['message'] = $message;
-                    
-                        $res_sess_duration = 10;
-                        $_SESSION['expire'] = time() + $res_sess_duration;
-
-                        echo "<script>window.location='manage-users.php';</script>";
+                        echo "<script>window.location='manage-users.php';</script>";	
                     }
-                }else{
+                } else {
                     $response = "error";
-                    $message = "User account created successfully.";
+                    $message = "User creation failed. Try again later or contact tech support.";
                 
                     $_SESSION['response'] = $response;
                     $_SESSION['message'] = $message;
                 
-                    $res_sess_duration = 5;
+                    $res_sess_duration = 10;
                     $_SESSION['expire'] = time() + $res_sess_duration;
-
-                    echo "<script>window.location='manage-users.php';</script>";	
                 }
-            } else {
-                $response = "error";
-                $message = "User creation failed. Try again later or contact tech support.";
-            
-                $_SESSION['response'] = $response;
-                $_SESSION['message'] = $message;
-            
-                $res_sess_duration = 10;
-                $_SESSION['expire'] = time() + $res_sess_duration;
             }
         }else{
             $response = "error";
@@ -622,11 +625,12 @@
                     $response = "error";
                     $message = "User update failed. Try again later or contact tech support.";
             
-                $_SESSION['response'] = $response;
-                $_SESSION['message'] = $message;
+                    $_SESSION['response'] = $response;
+                    $_SESSION['message'] = $message;
             
-                $res_sess_duration = 10;
-                $_SESSION['expire'] = time() + $res_sess_duration;
+                    $res_sess_duration = 10;
+                    $_SESSION['expire'] = time() + $res_sess_duration;
+                }
             }
         }else{
             $response = "error";
@@ -676,26 +680,27 @@
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
             
-            if(isset($_POST['submit_new_landlord'])){
-                if(isset($_SESSION['nl_focus'])){
-                    echo "<script>window.location='new-landlord.php?landlord-id=".$inserted_id."';</script>";
-                }else{
-                    echo "<script>window.location='view-details.php?id=".$inserted_id."&view_target=landlords&source=manage-landlords';</script>";
+                if(isset($_POST['submit_new_landlord'])){
+                    if(isset($_SESSION['nl_focus'])){
+                        echo "<script>window.location='new-landlord.php?landlord-id=".$inserted_id."';</script>";
+                    }else{
+                        echo "<script>window.location='view-details.php?id=".$inserted_id."&view_target=landlords&source=manage-landlords';</script>";
+                    }
                 }
-            }
             
-            // elseif(isset($_POST['submit_landlord_add_property'])){
-            //     echo "<script>window.location='manage-properties.php?landlord-id=".$inserted_id."';</script>";
-            // }
-        } else {
-            $response = "error";
-            $message = "New landlord listing failed. Try again later or contact tech support.";
+                // elseif(isset($_POST['submit_landlord_add_property'])){
+                //     echo "<script>window.location='manage-properties.php?landlord-id=".$inserted_id."';</script>";
+                // }
+            } else {
+                $response = "error";
+                $message = "New landlord listing failed. Try again later or contact tech support.";
         
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
         
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+                $res_sess_duration = 10;
+                $_SESSION['expire'] = time() + $res_sess_duration;
+            }
         }
     }
 
@@ -853,8 +858,9 @@
                 }elseif(isset($_POST['submit_property_add_tenants'])){
                     if(isset($_SESSION['nl_focus'])){
                         echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."&new-tenant=true';</script>";
-                }else{
-                    echo "<script>window.location='manage-tenants.php?add-tenant=true&property-id=".$inserted_id."';</script>";
+                    }else{
+                        echo "<script>window.location='manage-tenants.php?add-tenant=true&property-id=".$inserted_id."';</script>";
+                    }
                 }
             }
         } else {
@@ -912,11 +918,12 @@
                 $response = "error";
                 $message = "Property update failed. Try again later or contact tech support.";
             
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
             
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+                $res_sess_duration = 10;
+                $_SESSION['expire'] = time() + $res_sess_duration;
+            }
         }
     }
 
@@ -1099,33 +1106,34 @@
                 $response = "success";
                 $message = "Tenant added successfully.";
             
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
             
-            $res_sess_duration = 5;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+                $res_sess_duration = 5;
+                $_SESSION['expire'] = time() + $res_sess_duration;
             
-            if(isset($_SESSION['nl_focus'])){
-                $retrieve_all_properties = "select * from properties where id='".$property."'";
-                $rap_result = $con->query($retrieve_all_properties);
-                while($row = $rap_result->fetch_assoc())
-                {
-                    $_landlord_id=$row['landlord_id'];
-                }
+                if(isset($_SESSION['nl_focus'])){
+                    $retrieve_all_properties = "select * from properties where id='".$property."'";
+                    $rap_result = $con->query($retrieve_all_properties);
+                    while($row = $rap_result->fetch_assoc())
+                    {
+                        $_landlord_id=$row['landlord_id'];
+                    }
 
-                echo "<script>window.location='new-landlord.php?landlord-id=".$_landlord_id."&new-tenant=true';</script>";
-            }else{
-                echo "<script>window.location='manage-tenants.php';</script>";
+                    echo "<script>window.location='new-landlord.php?landlord-id=".$_landlord_id."&new-tenant=true';</script>";
+                }else{
+                    echo "<script>window.location='manage-tenants.php';</script>";
+                }
+            } else {
+                $response = "error";
+                $message = "Process failed! Try again later or contact tech support.";
+            
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
+            
+                $res_sess_duration = 10;
+                $_SESSION['expire'] = time() + $res_sess_duration;
             }
-        } else {
-            $response = "error";
-            $message = "Process failed! Try again later or contact tech support.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
         }
     }
 
@@ -1272,11 +1280,12 @@
                 $response = "error";
                 $message = "Tenant update failed. Try again later or contact tech support.";
             
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
             
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+                $res_sess_duration = 10;
+                $_SESSION['expire'] = time() + $res_sess_duration;
+            }
         }
     }
 
@@ -1323,16 +1332,17 @@
                     AuditLog::log('PAYMENT_RECORDED', null, $tenant_id, array('payment_id' => $payment_id, 'amount' => $paid_amount, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
                     $post_sph = true;
                 
-                $response = "success";
-                $message = "Payment added successfully.";
+                    $response = "success";
+                    $message = "Payment added successfully.";
             
-                $_SESSION['response'] = $response;
-                $_SESSION['message'] = $message;
+                    $_SESSION['response'] = $response;
+                    $_SESSION['message'] = $message;
             
-                $res_sess_duration = 5;
-                $_SESSION['expire'] = time() + $res_sess_duration;
+                    $res_sess_duration = 5;
+                    $_SESSION['expire'] = time() + $res_sess_duration;
     
-                echo "<script>window.location='payment-history.php?tenant-id=".$tenant_id."';</script>";
+                    echo "<script>window.location='payment-history.php?tenant-id=".$tenant_id."';</script>";
+                }
             }
         }else{
             $submit_payment_history = "INSERT INTO payment_history(tenant_id, due_date, expected_amount)values('".$tenant_id."','".$p_due_date."','".$o_expected_amount."')";
@@ -1439,11 +1449,12 @@
                 $response = "error";
                 $message = "Process failed. Try again later or contact tech support.";
             
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
             
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+                $res_sess_duration = 10;
+                $_SESSION['expire'] = time() + $res_sess_duration;
+            }
         }
     }
 
