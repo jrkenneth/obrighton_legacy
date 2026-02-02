@@ -116,7 +116,7 @@
     //login - PHASE 3: Secure Login Handler
     if( isset($_POST['login']) ){
         // SECURITY: Validate CSRF token first
-        if(!CSRFProtection::checkToken($_POST['csrf_token'] ?? '')){
+        if(!CSRFProtection::validateToken($_POST['csrf_token'] ?? '')){
             AuditLog::log('LOGIN_CSRF_FAILED', null, $_POST['user'] ?? 'unknown', array('reason' => 'Invalid CSRF token'), 'CRITICAL');
             $message = "<span class='text-danger'>Security check failed. Please try logging in again.</span>";
         } else {
