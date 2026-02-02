@@ -2915,13 +2915,15 @@
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
 
-                if($_GET['source'] == "view-details"){
-                    $params = "?id=".$target_id."&target=users";
+                if(($_GET['source'] ?? '') == "view-details"){
+                    $view_target = $_GET['view_target'] ?? 'users';
+                    $source = $_GET['source'] ?? '';
+                    $params = "?id=".$target_id."&view_target=".$view_target."&source=".$source;
                 }else{
                     $params = "";
                 }
 
-                $safe_source = basename($_GET['source']);
+                $safe_source = basename($_GET['source'] ?? '');
                 echo "<script>window.location='".$safe_source.".php".$params."';</script>";	
             }else{
                 $response = "error";
@@ -2952,13 +2954,15 @@
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
 
-                if($_GET['source'] == "view-details"){
-                    $params = "?id=".$target_id."&target=users";
+                if(($_GET['source'] ?? '') == "view-details"){
+                    $view_target = $_GET['view_target'] ?? 'users';
+                    $source = $_GET['source'] ?? '';
+                    $params = "?id=".$target_id."&view_target=".$view_target."&source=".$source;
                 }else{
                     $params = "";
                 }
 
-                $safe_source = basename($_GET['source']);
+                $safe_source = basename($_GET['source'] ?? '');
                 echo "<script>window.location='".$safe_source.".php".$params."';</script>";	
             }else{
                 $response = "error";
