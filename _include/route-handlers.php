@@ -604,7 +604,7 @@
             } else {
                 $role_id = (int)$role;
                 $current_id = (int)$current_id;
-                $stmt->bind_param("ssissssi", $first_name, $last_name, $profile_picture, $email_address, $contact_number, $location, $user_id, $role_id, $current_id);
+                $stmt->bind_param("sssssssii", $first_name, $last_name, $profile_picture, $email_address, $contact_number, $location, $user_id, $role_id, $current_id);
                 if($stmt->execute()){
                     $stmt->close();
                     $response = "success";
