@@ -1254,30 +1254,46 @@
 
     //submit new payment
     if(isset($_POST['submit_new_payment'])){	
-        $tenant_id = $_POST['tenant_id'];
-        $p_due_date =$_POST['p_due_date'];
-        $o_expected_amount =$_POST['o_expected_amount'];
-        $log_paid_date = $_POST['paid_date'];
-        $paid_amount =$_POST['paid_amount'];
-        $expected_date =$_POST['due_date'];
-        $expected_amount =$_POST['expected_amount'];
+        $tenant_id = intval($_POST['tenant_id']);
+        $p_due_date = InputValidator::sanitizeText($_POST['p_due_date']);
+        $o_expected_amount = floatval($_POST['o_expected_amount']);
+        $log_paid_date = InputValidator::sanitizeText($_POST['paid_date']);
+        $paid_amount = floatval($_POST['paid_amount']);
+        $expected_date = InputValidator::sanitizeText($_POST['due_date']);
+        $expected_amount = floatval($_POST['expected_amount']);
 
         if(isset($_POST['paid'])){
-            $submit_payment_history = "INSERT INTO payment_history(tenant_id, due_date, expected_amount, payment_date, paid_amount)values('".$tenant_id."','".$p_due_date."','".$o_expected_amount."', '".$log_paid_date."', '".$paid_amount."')";
-            $post_sph = mysqli_query($con, $submit_payment_history);
-            
-            if ($post_sph) {
-                $inserted_id = mysqli_insert_id($con);
-                $inserted_id2 = $inserted_id + 1;
-    
-                //Create and add Payment ID
-                $payment_id = "OBPH".sprintf("%03d", $inserted_id);
-                $add_payment_id = "UPDATE payment_history set payment_id='".$payment_id."' where id='".$inserted_id."'";
-                $post_api = mysqli_query($con, $add_payment_id);
-    
-                $payment_id2 = "OBPH".sprintf("%03d", $inserted_id2);
-                $initiate_payment_history2 = "INSERT INTO payment_history(payment_id, tenant_id, due_date, expected_amount)values('".$payment_id2."', '".$tenant_id."','".$expected_date."','".$expected_amount."')";
-                $post_iph2 = mysqli_query($con, $initiate_payment_history2);
+            // PHASE 5: Use prepared statement for INSERT payment history
+            $stmt = $con->prepare("INSERT INTO payment_history(tenant_id, due_date, expected_amount, payment_date, paid_amount) VALUES (?, ?, ?, ?, ?)");
+            if($stmt !== false){
+                $stmt->bind_param("isddd", $tenant_id, $p_due_date, $o_expected_amount, $log_paid_date, $paid_amount);
+                if($stmt->execute()){
+                    $inserted_id = $stmt->insert_id;
+                    $inserted_id2 = $inserted_id + 1;
+                    $stmt->close();
+        
+                    //Create and add Payment ID
+                    $payment_id = "OBPH".sprintf("%03d", $inserted_id);
+                    
+                    // PHASE 5: Use prepared statement for payment_id update
+                    $update_stmt = $con->prepare("UPDATE payment_history SET payment_id=? WHERE id=?");
+                    $update_stmt->bind_param("si", $payment_id, $inserted_id);
+                    $update_stmt->execute();
+                    $update_stmt->close();
+        
+                    $payment_id2 = "OBPH".sprintf("%03d", $inserted_id2);
+                    
+                    // PHASE 5: Use prepared statement for second payment history INSERT
+                    $stmt2 = $con->prepare("INSERT INTO payment_history(payment_id, tenant_id, due_date, expected_amount) VALUES (?, ?, ?, ?)");
+                    if($stmt2 !== false){
+                        $stmt2->bind_param("sisd", $payment_id2, $tenant_id, $expected_date, $expected_amount);
+                        $stmt2->execute();
+                        $stmt2->close();
+                    }
+                    
+                    // PHASE 5: Log payment creation
+                    AuditLog::log('PAYMENT_RECORDED', null, $tenant_id, array('payment_id' => $payment_id, 'amount' => $paid_amount, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                    $post_sph = true;
                 
                 $response = "success";
                 $message = "Payment added successfully.";
@@ -1364,30 +1380,36 @@
     
     //update payment history
     if(isset($_POST['update_payment'])){	
-        $record_id = $_POST['record_id'];
-        $tenant_id = $_POST['tenant_id'];
-        $due_date = $_POST['due_date'];
-        $amount_due =$_POST['amount_due'];
-        $date_paid =$_POST['date_paid'];
-        $paid_amount =$_POST['paid_amount'];
+        $record_id = intval($_POST['record_id']);
+        $tenant_id = intval($_POST['tenant_id']);
+        $due_date = InputValidator::sanitizeText($_POST['due_date']);
+        $amount_due = floatval($_POST['amount_due']);
+        $date_paid = InputValidator::sanitizeText($_POST['date_paid']);
+        $paid_amount = floatval($_POST['paid_amount']);
 
-        $update_payment_history = "UPDATE payment_history set due_date='".$due_date."', expected_amount='".$amount_due."', payment_date=NULLIF('".$date_paid."', ''), paid_amount=NULLIF('".$paid_amount."', '') where id='".$record_id."'";
-        $post_uph = mysqli_query($con, $update_payment_history);
-                                
-        if ($post_uph) {
-            $response = "success";
-            $message = "Record updated successfully.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 5;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+        // PHASE 5: Use prepared statement for UPDATE payment history
+        $stmt = $con->prepare("UPDATE payment_history SET due_date=?, expected_amount=?, payment_date=NULLIF(?, ''), paid_amount=NULLIF(?, '') WHERE id=?");
+        if($stmt !== false){
+            $stmt->bind_param("sddsi", $due_date, $amount_due, $date_paid, $paid_amount, $record_id);
+            if($stmt->execute()){
+                $stmt->close();
+                $response = "success";
+                $message = "Record updated successfully.";
+                
+                // PHASE 5: Log payment update
+                AuditLog::log('PAYMENT_UPDATED', null, $tenant_id, array('record_id' => $record_id, 'amount' => $amount_due, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
+                
+                $res_sess_duration = 5;
+                $_SESSION['expire'] = time() + $res_sess_duration;
 
-            echo "<script>window.location='payment-history.php?tenant-id=".$tenant_id."';</script>";	
-        } else {
-            $response = "error";
-            $message = "Process failed. Try again later or contact tech support.";
+                echo "<script>window.location='payment-history.php?tenant-id=".$tenant_id."';</script>";	
+            } else {
+                $stmt->close();
+                $response = "error";
+                $message = "Process failed. Try again later or contact tech support.";
             
             $_SESSION['response'] = $response;
             $_SESSION['message'] = $message;
@@ -1748,37 +1770,48 @@
         }else{
             $services = "";
         }
-		$_first_name = $_POST['first_name'];
-		$_last_name = $_POST['last_name'];
-		$_contact_number = $_POST['contact_number'];
-		$_company = $_POST['company'];
-		$_address = $_POST['address'];
-		$_uploader = $_POST['uploader'];
+		$_first_name = InputValidator::sanitizeText($_POST['first_name']);
+		$_last_name = InputValidator::sanitizeText($_POST['last_name']);
+		$_contact_number = InputValidator::sanitizeText($_POST['contact_number']);
+		$_company = InputValidator::sanitizeText($_POST['company']);
+		$_address = InputValidator::sanitizeText($_POST['address']);
+		$_uploader = intval($_POST['uploader']);
 		
         if(!empty($services)){
-            $add_service_provider="INSERT INTO artisans(first_name, last_name, company_name, phone_number, `address`, uploader_id)values('".$_first_name."', '".$_last_name."', '".$_company."', '".$_contact_number."', '".$_address."', '".$_uploader."')";
-            $run_asp=mysqli_query($con,$add_service_provider);
+            // PHASE 5: Use prepared statement for INSERT artisan
+            $stmt = $con->prepare("INSERT INTO artisans(first_name, last_name, company_name, phone_number, `address`, uploader_id) VALUES (?, ?, ?, ?, ?, ?)");
+            if($stmt !== false){
+                $stmt->bind_param("sssssi", $_first_name, $_last_name, $_company, $_contact_number, $_address, $_uploader);
+                if($stmt->execute()){
+                    $inserted_id = $stmt->insert_id;
+                    $stmt->close();
 
-            if($run_asp){
-                $inserted_id = mysqli_insert_id($con);
-
-                foreach ($services as $service){
-                    $_target_id = $service;
+                    // PHASE 5: Use prepared statement for artisan services INSERT
+                    $stmt2 = $con->prepare("INSERT INTO artisan_services(artisan_id, service_id) VALUES (?, ?)");
+                    if($stmt2 !== false){
+                        foreach ($services as $service){
+                            $_target_id = intval($service);
+                            
+                            $stmt2->bind_param("ii", $inserted_id, $_target_id);
+                            $stmt2->execute();
+                        }
+                        $stmt2->close();
+                    }
                     
-                    $add_artisan_services="INSERT INTO artisan_services(artisan_id, service_id)values('".$inserted_id."', '".$_target_id."')";
-                    $run_aas=mysqli_query($con,$add_artisan_services);		
+                    // PHASE 5: Log artisan creation
+                    AuditLog::log('ARTISAN_CREATED', null, $_uploader, array('artisan_id' => $inserted_id, 'services_count' => count($services), 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+
+                    $response = "success";
+                    $message = "Service provider added successfully.";
+
+                    $_SESSION['response'] = $response;
+                    $_SESSION['message'] = $message;
+                    
+                    $res_sess_duration = 5;
+                    $_SESSION['expire'] = time() + $res_sess_duration;
+
+                    echo "<script>window.location='manage-artisans.php';</script>";
                 }
-
-                $response = "success";
-                $message = "Service provider added successfully.";
-
-                $_SESSION['response'] = $response;
-                $_SESSION['message'] = $message;
-                
-                $res_sess_duration = 5;
-                $_SESSION['expire'] = time() + $res_sess_duration;
-
-                echo "<script>window.location='manage-artisans.php';</script>";
             }
         }else{
             $response = "error";
@@ -1799,22 +1832,31 @@
         }else{
             $services = "";
         }
-		$_this_artisan = $_POST['this_artisan'];
-		$_first_name = $_POST['first_name'];
-		$_last_name = $_POST['last_name'];
-		$_contact_number = $_POST['contact_number'];
-		$_company = $_POST['company'];
-		$_address = $_POST['address'];
+		$_this_artisan = intval($_POST['this_artisan']);
+		$_first_name = InputValidator::sanitizeText($_POST['first_name']);
+		$_last_name = InputValidator::sanitizeText($_POST['last_name']);
+		$_contact_number = InputValidator::sanitizeText($_POST['contact_number']);
+		$_company = InputValidator::sanitizeText($_POST['company']);
+		$_address = InputValidator::sanitizeText($_POST['address']);
 		
-        $update_service_provider="update artisans set first_name='".$_first_name."', last_name='".$_last_name."', company_name='".$_company."', phone_number='".$_contact_number."', `address`='".$_address."' where id='".$_this_artisan."'";
-        $run_usp=mysqli_query($con,$update_service_provider);
-        if($run_usp){
-            if(!empty($services)){
-                foreach ($services as $service){
-                    $_target_id = $service;
-                    
-                    $add_artisan_services="INSERT INTO artisan_services(artisan_id, service_id)values('".$_this_artisan."', '".$_target_id."')";
-                    $run_aas=mysqli_query($con,$add_artisan_services);		
+        // PHASE 5: Use prepared statement for UPDATE artisan
+        $stmt = $con->prepare("UPDATE artisans SET first_name=?, last_name=?, company_name=?, phone_number=?, `address`=? WHERE id=?");
+        if($stmt !== false){
+            $stmt->bind_param("sssssi", $_first_name, $_last_name, $_company, $_contact_number, $_address, $_this_artisan);
+            if($stmt->execute()){
+                $stmt->close();
+                if(!empty($services)){
+                    // PHASE 5: Use prepared statement for artisan services INSERT
+                    $stmt2 = $con->prepare("INSERT INTO artisan_services(artisan_id, service_id) VALUES (?, ?)");
+                    if($stmt2 !== false){
+                        foreach ($services as $service){
+                            $_target_id = intval($service);
+                            
+                            $stmt2->bind_param("ii", $_this_artisan, $_target_id);
+                            $stmt2->execute();
+                        }
+                        $stmt2->close();
+                    }
                 }
             }
 
