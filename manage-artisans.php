@@ -10,8 +10,11 @@
 	include("_include/header.php");
 
 	if(isset($_GET['service'])){
-		$retrieve_service_type = "select * from all_services where id='".$_GET['service']."'";
-		$rst_result = $con->query($retrieve_service_type);
+		$service_id = intval($_GET['service']);
+		$stmt = $con->prepare("select * from all_services where id=?");
+		$stmt->bind_param("i", $service_id);
+		$stmt->execute();
+		$rst_result = $stmt->get_result();
 		while($row = $rst_result->fetch_assoc())
 		{
 			$_service_name=$row['service_name'];
@@ -86,14 +89,20 @@
 										<tbody>
 											<?php
 												if(isset($_GET['service'])){
-													$retrieve_services = "select * from artisan_services where service_id='".$_GET['service']."'";
-													$rs_result = $con->query($retrieve_services);
+													$service_id_filter = intval($_GET['service']);
+													$stmt = $con->prepare("select * from artisan_services where service_id=?");
+													$stmt->bind_param("i", $service_id_filter);
+													$stmt->execute();
+													$rs_result = $stmt->get_result();
 													while($row = $rs_result->fetch_assoc())
 													{
 														$_service_provider=$row['artisan_id'];
 
-														$retrieve_all_artisans = "select * from artisans where id='".$_service_provider."'";
-														$raa_result = $con->query($retrieve_all_artisans);
+														$provider_id = intval($_service_provider);
+														$stmt2 = $con->prepare("select * from artisans where id=?");
+														$stmt2->bind_param("i", $provider_id);
+														$stmt2->execute();
+														$raa_result = $stmt2->get_result();
 														while($row = $raa_result->fetch_assoc())
 														{
 															$_id=$row['id'];

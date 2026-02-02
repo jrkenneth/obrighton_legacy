@@ -4,10 +4,12 @@
 	date_default_timezone_set("Africa/Lagos");
 	
 	if(isset($_GET['listing-id'])){
-		$this_listing_id = $_GET['listing-id'];
+		$this_listing_id = intval($_GET['listing-id']);
 
-		$retrieve_this_listing = "select * from listings where id='".$this_listing_id."'";
-		$rtl_result = $con->query($retrieve_this_listing);
+		$stmt = $con->prepare("select * from listings where id=?");
+		$stmt->bind_param("i", $this_listing_id);
+		$stmt->execute();
+		$rtl_result = $stmt->get_result();
 		while($row = $rtl_result->fetch_assoc())
 		{
 			$_listing_id=$row['listing_id'];
@@ -64,8 +66,10 @@
                                         </thead>
 										<tbody>
 										<?php
-											$retrieve_all_media = "select * from listing_media where listing_id='".$this_listing_id."' order by id asc";
-											$ram_result = $con->query($retrieve_all_media);
+											$stmt = $con->prepare("select * from listing_media where listing_id=? order by id asc");
+											$stmt->bind_param("i", $this_listing_id);
+											$stmt->execute();
+											$ram_result = $stmt->get_result();
 											while($row = $ram_result->fetch_assoc())
 											{
 												$_id=$row['id'];
