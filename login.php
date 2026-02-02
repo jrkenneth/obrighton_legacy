@@ -1,6 +1,18 @@
 <?php
 	
     include("_include/dbconnect.php");
+    
+    // Load security libraries for CSRF protection
+    require_once '_include/DatabaseHelper.php';
+    require_once '_include/InputValidator.php';
+    require_once '_include/CSRFProtection.php';
+    require_once '_include/Authorization.php';
+    require_once '_include/AuditLog.php';
+    
+    // Initialize security systems
+    $db = new DatabaseHelper($con);
+    AuditLog::initialize($db);
+    CSRFProtection::initialize();
 
 	if(isset($_GET['set-password'])){
 		$_SESSION['user_id'] = $_GET['user-id'];
