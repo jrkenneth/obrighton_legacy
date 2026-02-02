@@ -167,16 +167,23 @@
         if($new_password == $confirm_new_password){
             $hash = password_hash($new_password, PASSWORD_DEFAULT);
         
-            $set_password = "update users set password='".$hash."', dashboard_access='1' where user_id='".$user_id."'";
-            $run_sp = mysqli_query($con, $set_password);
-            
-            if($run_sp){
-                unset($_SESSION["user_id"]);
-
-                $message = "<span class='text-success'>Congrats ".$first_name.", your password has been set successfully and your account is active. You'll be redirected to the Login page shortly.</span>";
-                echo "<meta http-equiv='refresh' content='5; url=login.php' >";
-            }else{
-                $message = "<span class='text-danger'>Password creation failed. Please try again or contact tech support.</span>";
+            // PHASE 5: Use prepared statement to prevent SQL injection
+            $stmt = $con->prepare("UPDATE users SET password=?, dashboard_access='1' WHERE user_id=?");
+            if($stmt === false){
+                $message = "<span class='text-danger'>Password creation failed. System error. Please try again or contact tech support.</span>";
+            } else {
+                $stmt->bind_param("ss", $hash, $user_id);
+                if($stmt->execute()){
+                    // PHASE 5: Log password change
+                    AuditLog::log('PASSWORD_CHANGED', null, $user_id, array('action' => 'User account activated', 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                    
+                    unset($_SESSION["user_id"]);
+                    $message = "<span class='text-success'>Congrats ".$first_name.", your password has been set successfully and your account is active. You'll be redirected to the Login page shortly.</span>";
+                    echo "<meta http-equiv='refresh' content='5; url=login.php' >";
+                } else {
+                    $message = "<span class='text-danger'>Password creation failed. Please try again or contact tech support.</span>";
+                }
+                $stmt->close();
             }
         }else{
             $message = "<span class='text-danger'>Passwords do not match. Please confirm your password carefully.</span>";
@@ -192,15 +199,22 @@
         }
 		$access_target = $_POST['access_target'];
 		$user_role = $_POST['user_role'];
-		$user_id = $_POST['user_id'];
+		$user_id = intval($_POST['user_id']);
 		
         if(!empty($properties)){
             foreach ($properties as $property){ 
-                $_target_id = $property;
+                $_target_id = intval($property);
                 
-                $add_property_access="INSERT INTO access_mgt(user_role, user_id, target, target_id)values('".$user_role."', '".$user_id."', '".$access_target."', '".$_target_id."')";
-                $run_apa=mysqli_query($con,$add_property_access);		
-            }
+                // PHASE 5: Use prepared statement for access management INSERT
+                $stmt = $con->prepare("INSERT INTO access_mgt(user_role, user_id, target, target_id) VALUES (?, ?, ?, ?)");
+                if($stmt !== false){
+                    $stmt->bind_param("sisi", $user_role, $user_id, $access_target, $_target_id);
+                    if($stmt->execute()){
+                        // Log access grant
+                        AuditLog::log('ACCESS_GRANTED', null, $user_id, array('target' => $access_target, 'target_id' => $_target_id), 'INFO');
+                    }
+                    $stmt->close();
+                }
 
             $response = "success";
             $message = "Changes updated successfully.";
@@ -379,22 +393,42 @@
             $ag_option = "selected";
         }
 
-        $check_user_email = "select * from users where email='".$email_address."'";
-        $cue_result = $con->query($check_user_email);
-        $cue_row_count = mysqli_num_rows($cue_result);
+        // PHASE 5: Use prepared statement for email check
+        $stmt = $con->prepare("SELECT id FROM users WHERE email=?");
+        if($stmt === false){
+            $message = "Error: Could not validate email. Please try again.";
+            $cue_row_count = -1;
+        } else {
+            $stmt->bind_param("s", $email_address);
+            $stmt->execute();
+            $cue_result = $stmt->get_result();
+            $cue_row_count = $cue_result->num_rows;
+            $stmt->close();
+        }
 
         if($cue_row_count < 1){
 
-            $submit_new_user = "INSERT INTO users(first_name, last_name, profile_picture, email, phone_number, address, role_id)values('".mysqli_real_escape_string($con, $first_name)."','".mysqli_real_escape_string($con, $last_name)."', NULLIF('".$profile_picture."', ''),'".mysqli_real_escape_string($con, $email_address)."','".$contact_number."','".mysqli_real_escape_string($con, $location)."', '".$role."')";
-            $post_snu = mysqli_query($con, $submit_new_user);
-                                    
-            if ($post_snu) {	
-                $inserted_id = mysqli_insert_id($con);
-                
-                //Create and add User ID
-                $user_id = $code."".sprintf("%03d", $inserted_id);
-                $add_user_id = "UPDATE users set user_id='".$user_id."' where id='".$inserted_id."'";
-                $post_aui = mysqli_query($con, $add_user_id);
+            // PHASE 5: Use prepared statement for INSERT
+            $stmt = $con->prepare("INSERT INTO users(first_name, last_name, profile_picture, email, phone_number, address, role_id) VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?)");
+            if($stmt === false){
+                $message = "Error: Could not create user. Please try again.";
+            } else {
+                $stmt->bind_param("ssssssi", $first_name, $last_name, $profile_picture, $email_address, $contact_number, $location, $role);
+                if($stmt->execute()){
+                    $inserted_id = $stmt->insert_id;
+                    $stmt->close();
+                    
+                    //Create and add User ID
+                    $user_id = $code."".sprintf("%03d", $inserted_id);
+                    
+                    // PHASE 5: Use prepared statement for UPDATE
+                    $update_stmt = $con->prepare("UPDATE users SET user_id=? WHERE id=?");
+                    $update_stmt->bind_param("si", $user_id, $inserted_id);
+                    $update_stmt->execute();
+                    $update_stmt->close();
+
+                    // PHASE 5: Log user creation
+                    AuditLog::log('USER_CREATED', null, $inserted_id, array('email' => $email_address, 'role' => $role, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
 
                 if(!empty($profile_picture)){
                     $ifile_tmp=$_FILES['profile_picture']['tmp_name'];
@@ -502,9 +536,13 @@
         if($email_address == $current_email_address){
             $cue_row_count = 0;
         }else{
-            $check_user_email = "select * from users where email='".$email_address."'";
-            $cue_result = $con->query($check_user_email);
-            $cue_row_count = mysqli_num_rows($cue_result);
+            // PHASE 5: Use prepared statement for email check
+            $stmt = $con->prepare("SELECT id FROM users WHERE email=?");
+            $stmt->bind_param("s", $email_address);
+            $stmt->execute();
+            $cue_result = $stmt->get_result();
+            $cue_row_count = $cue_result->num_rows;
+            $stmt->close();
         }
 
         if(empty($profile_picture)){
@@ -527,23 +565,34 @@
 
         if($cue_row_count < 1){
 
-            $update_user = "UPDATE users set first_name='".$first_name."', last_name='".$last_name."', profile_picture='".$profile_picture."', email='".$email_address."', phone_number='".$contact_number."', address='".$location."', user_id='".$user_id."', role_id='".$role."' where id='".$current_id."'";
-            $post_uu = mysqli_query($con, $update_user);
-                                    
-            if ($post_uu) {
-                $response = "success";
-                $message = "User updated successfully.";
-            
-                $_SESSION['response'] = $response;
-                $_SESSION['message'] = $message;
-            
-                $res_sess_duration = 5;
-                $_SESSION['expire'] = time() + $res_sess_duration;
-
-                echo "<script>window.location='".$_SESSION['redirect_url']."';</script>";	
-            } else {
+            // PHASE 5: Use prepared statement for UPDATE
+            $stmt = $con->prepare("UPDATE users SET first_name=?, last_name=?, profile_picture=?, email=?, phone_number=?, address=?, user_id=?, role_id=? WHERE id=?");
+            if($stmt === false){
                 $response = "error";
                 $message = "User update failed. Try again later or contact tech support.";
+            } else {
+                $role_id = (int)$role;
+                $current_id = (int)$current_id;
+                $stmt->bind_param("ssissssi", $first_name, $last_name, $profile_picture, $email_address, $contact_number, $location, $user_id, $role_id, $current_id);
+                if($stmt->execute()){
+                    $stmt->close();
+                    $response = "success";
+                    $message = "User updated successfully.";
+                    
+                    // PHASE 5: Log user update
+                    AuditLog::log('USER_UPDATED', null, $current_id, array('email' => $email_address, 'role' => $role, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                
+                    $_SESSION['response'] = $response;
+                    $_SESSION['message'] = $message;
+                
+                    $res_sess_duration = 5;
+                    $_SESSION['expire'] = time() + $res_sess_duration;
+
+                    echo "<script>window.location='".$_SESSION['redirect_url']."';</script>";	
+                } else {
+                    $stmt->close();
+                    $response = "error";
+                    $message = "User update failed. Try again later or contact tech support.";
             
                 $_SESSION['response'] = $response;
                 $_SESSION['message'] = $message;
@@ -565,30 +614,39 @@
 
     //add new landlord
     if(isset($_POST['submit_new_landlord']) || isset($_POST['submit_landlord_add_property'])){
-        $first_name = $_POST['first_name'];
-        $last_name = $_POST['last_name'];
-        $email_address =$_POST['email_address'];
-        $contact_number =$_POST['contact_number'];	
-        $uploader =$_POST['uploader'];	
+        $first_name = InputValidator::sanitizeText($_POST['first_name'] ?? '');
+        $last_name = InputValidator::sanitizeText($_POST['last_name'] ?? '');
+        $email_address = InputValidator::sanitizeText($_POST['email_address'] ?? '');
+        $contact_number = InputValidator::sanitizeText($_POST['contact_number'] ?? '');	
+        $uploader = intval($_POST['uploader'] ?? 0);	
 
-        $submit_new_landlord = "INSERT INTO landlords(first_name, last_name, phone, email, uploader_id)values('".mysqli_real_escape_string($con, $first_name)."','".mysqli_real_escape_string($con, $last_name)."','".$contact_number."','".mysqli_real_escape_string($con, $email_address)."','".$uploader."')";
-        $post_snl = mysqli_query($con, $submit_new_landlord);
-                                
-        if ($post_snl) {	
-            $inserted_id = mysqli_insert_id($con);
+        // PHASE 5: Use prepared statement for INSERT
+        $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, uploader_id) VALUES (?, ?, ?, ?, ?)");
+        if($stmt !== false){
+            $stmt->bind_param("ssssi", $first_name, $last_name, $contact_number, $email_address, $uploader);
+            if($stmt->execute()){
+                $inserted_id = $stmt->insert_id;
+                $stmt->close();
+                
+                //Create and add Landlord ID
+                $landlord_id = "OBL".sprintf("%03d", $inserted_id);
+                
+                // PHASE 5: Use prepared statement for UPDATE
+                $update_stmt = $con->prepare("UPDATE landlords SET landlord_id=? WHERE id=?");
+                $update_stmt->bind_param("si", $landlord_id, $inserted_id);
+                $update_stmt->execute();
+                $update_stmt->close();
+                
+                // PHASE 5: Log landlord creation
+                AuditLog::log('LANDLORD_CREATED', null, $uploader, array('landlord_id' => $landlord_id, 'email' => $email_address, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+
+                $response = "success";
+                $message = "New landlord listed successfully.";
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
             
-            //Create and add Landlord ID
-            $landlord_id = "OBL".sprintf("%03d", $inserted_id);
-            $add_landlord_id = "UPDATE landlords set landlord_id='".$landlord_id."' where id='".$inserted_id."'";
-            $post_ali = mysqli_query($con, $add_landlord_id);
-
-            $response = "success";
-            $message = "New landlord listed successfully.";
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-        
-            $res_sess_duration = 5;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+                $res_sess_duration = 5;
+                $_SESSION['expire'] = time() + $res_sess_duration;
             
             if(isset($_POST['submit_new_landlord'])){
                 if(isset($_SESSION['nl_focus'])){
@@ -615,26 +673,43 @@
 
     //update landlord
     if(isset($_POST['update_landlord'])){	
-        $first_name = $_POST['first_name'];
-        $last_name = $_POST['last_name'];
-        $email_address =$_POST['email_address'];
-        $contact_number =$_POST['contact_number'];	
-        $this_landlord_id =$_POST['this_landlord_id'];	
+        $first_name = InputValidator::sanitizeText($_POST['first_name'] ?? '');
+        $last_name = InputValidator::sanitizeText($_POST['last_name'] ?? '');
+        $email_address = InputValidator::sanitizeText($_POST['email_address'] ?? '');
+        $contact_number = InputValidator::sanitizeText($_POST['contact_number'] ?? '');	
+        $this_landlord_id = intval($_POST['this_landlord_id'] ?? 0);	
 
-        $update_landlord = "UPDATE landlords set first_name='".$first_name."', last_name='".$last_name."', phone='".$contact_number."', email='".$email_address."' where id='".$this_landlord_id."'";
-        $post_ul = mysqli_query($con, $update_landlord);
+        // PHASE 5: Use prepared statement for UPDATE
+        $stmt = $con->prepare("UPDATE landlords SET first_name=?, last_name=?, phone=?, email=? WHERE id=?");
+        if($stmt !== false){
+            $stmt->bind_param("ssssi", $first_name, $last_name, $contact_number, $email_address, $this_landlord_id);
+            $stmt->execute();
+            $stmt->close();
+            $post_ul = true;
+        } else {
+            $post_ul = false;
+        }
 
         if(!empty($_POST['reset_landlord_password'])){
-            $reset_landlord_password =$_POST['reset_landlord_password'];
+            $reset_landlord_password = $_POST['reset_landlord_password'];
             $landlord_password_hash = password_hash($reset_landlord_password, PASSWORD_DEFAULT); //create password hash
             
-            $reset_landlord_password = "UPDATE landlords set password='".$landlord_password_hash."', password_status='1' where id='".$this_landlord_id."'";
-            $post_rlp = mysqli_query($con, $reset_landlord_password);
+            // PHASE 5: Use prepared statement for password reset
+            $reset_stmt = $con->prepare("UPDATE landlords SET password=?, password_status='1' WHERE id=?");
+            if($reset_stmt !== false){
+                $reset_stmt->bind_param("si", $landlord_password_hash, $this_landlord_id);
+                $reset_stmt->execute();
+                $reset_stmt->close();
+                AuditLog::log('LANDLORD_PASSWORD_RESET', null, $this_landlord_id, array('timestamp' => date('Y-m-d H:i:s')), 'INFO');
+            }
         }
                                 
         if ($post_ul) {
             $response = "success";
             $message = "Landlord updated successfully.";
+            
+            // PHASE 5: Log landlord update
+            AuditLog::log('LANDLORD_UPDATED', null, $this_landlord_id, array('email' => $email_address, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
             
             $_SESSION['response'] = $response;
             $_SESSION['message'] = $message;
@@ -679,55 +754,77 @@
         $uploader =$_POST['uploader'];
 
         if($_POST['landlord_input_type'] == "existing"){
-            $landlord = $_POST['landlord'];
+            $landlord = intval($_POST['landlord']);
         }elseif($_POST['landlord_input_type'] == "new"){
-            $landlord_first_name = $_POST['landlord_first_name'];
-            $landlord_last_name = $_POST['landlord_last_name'];
-            $landlord_email_address = $_POST['landlord_email_address'];
-            $landlord_contact_number = $_POST['landlord_contact_number'];
+            $landlord_first_name = InputValidator::sanitizeText($_POST['landlord_first_name']);
+            $landlord_last_name = InputValidator::sanitizeText($_POST['landlord_last_name']);
+            $landlord_email_address = InputValidator::sanitizeText($_POST['landlord_email_address']);
+            $landlord_contact_number = InputValidator::sanitizeText($_POST['landlord_contact_number']);
           
-            $submit_new_landlord = "INSERT INTO landlords(first_name, last_name, phone, email, uploader_id)values('".mysqli_real_escape_string($con, $landlord_first_name)."','".mysqli_real_escape_string($con, $landlord_last_name)."','".$landlord_contact_number."','".mysqli_real_escape_string($con, $landlord_email_address)."','".$uploader."')";
-            $post_snl = mysqli_query($con, $submit_new_landlord);
-                                    
-            if ($post_snl) {	
-                $landlord = mysqli_insert_id($con);
-                
-                //Create and add Landlord ID
-                $landlord_id = "OBL".sprintf("%03d", $landlord);
-                $add_landlord_id = "UPDATE landlords set landlord_id='".$landlord_id."' where id='".$landlord."'";
-                $post_ali = mysqli_query($con, $add_landlord_id);
+            // PHASE 5: Use prepared statement for new landlord
+            $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, uploader_id) VALUES (?, ?, ?, ?, ?)");
+            if($stmt !== false){
+                $uploader_int = intval($uploader);
+                $stmt->bind_param("ssssi", $landlord_first_name, $landlord_last_name, $landlord_contact_number, $landlord_email_address, $uploader_int);
+                if($stmt->execute()){
+                    $landlord = $stmt->insert_id;
+                    $stmt->close();
+                    
+                    //Create and add Landlord ID
+                    $landlord_id = "OBL".sprintf("%03d", $landlord);
+                    
+                    // PHASE 5: Use prepared statement for landlord_id update
+                    $update_stmt = $con->prepare("UPDATE landlords SET landlord_id=? WHERE id=?");
+                    $update_stmt->bind_param("si", $landlord_id, $landlord);
+                    $update_stmt->execute();
+                    $update_stmt->close();
+                    
+                    AuditLog::log('LANDLORD_CREATED_FOR_PROPERTY', null, $uploader_int, array('landlord_id' => $landlord_id), 'INFO');
+                } else {
+                    $stmt->close();
+                }
             }
         }
 
-        $submit_new_property = "INSERT INTO properties(landlord_id, type, title, description, closest_landmark, geo_location_url, location_address, location_city, location_state, location_country, no_of_apartments, uploader_id)values('".$landlord."','".$type."','".mysqli_real_escape_string($con, $title)."','".mysqli_real_escape_string($con, $description)."','".mysqli_real_escape_string($con, $closest_landmark)."','".mysqli_real_escape_string($con, $geo_location_url)."','".mysqli_real_escape_string($con, $address)."','".mysqli_real_escape_string($con, $city)."','".mysqli_real_escape_string($con, $state)."','".mysqli_real_escape_string($con, $country)."', NULLIF('".$living__spaces."', ''), '".$uploader."')";
-        $post_snp = mysqli_query($con, $submit_new_property);
-                                
-        if ($post_snp) {	
-            $inserted_id = mysqli_insert_id($con);
-            
-            //Create and add Property ID
-            $property_id = "OBP".sprintf("%03d", $inserted_id);
-            $add_property_id = "UPDATE properties set property_id='".$property_id."' where id='".$inserted_id."'";
-            $post_api = mysqli_query($con, $add_property_id);
+        // PHASE 5: Use prepared statement for INSERT property
+        $landlord_int = intval($landlord);
+        $uploader_int = intval($uploader);
+        $stmt = $con->prepare("INSERT INTO properties(landlord_id, type, title, description, closest_landmark, geo_location_url, location_address, location_city, location_state, location_country, no_of_apartments, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?)");
+        if($stmt !== false){
+            $stmt->bind_param("issssssssssi", $landlord_int, $type, $title, $description, $closest_landmark, $geo_location_url, $address, $city, $state, $country, $living__spaces, $uploader_int);
+            if($stmt->execute()){
+                $inserted_id = $stmt->insert_id;
+                $stmt->close();
+                
+                //Create and add Property ID
+                $property_id = "OBP".sprintf("%03d", $inserted_id);
+                
+                // PHASE 5: Use prepared statement for property_id update
+                $update_stmt = $con->prepare("UPDATE properties SET property_id=? WHERE id=?");
+                $update_stmt->bind_param("si", $property_id, $inserted_id);
+                $update_stmt->execute();
+                $update_stmt->close();
+                
+                AuditLog::log('PROPERTY_CREATED', null, $uploader_int, array('property_id' => $property_id, 'type' => $type, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
 
-            $response = "success";
-            $message = "Property added successfully.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 5;
-            $_SESSION['expire'] = time() + $res_sess_duration;
-            
-            if(isset($_POST['submit_new_property'])){
-                if(isset($_SESSION['nl_focus'])){
-                    echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."';</script>";
-                }else{
-                    echo "<script>window.location='manage-properties.php';</script>";
-                }
-            }elseif(isset($_POST['submit_property_add_tenants'])){
-                if(isset($_SESSION['nl_focus'])){
-                    echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."&new-tenant=true';</script>";
+                $response = "success";
+                $message = "Property added successfully.";
+                
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
+                
+                $res_sess_duration = 5;
+                $_SESSION['expire'] = time() + $res_sess_duration;
+                
+                if(isset($_POST['submit_new_property'])){
+                    if(isset($_SESSION['nl_focus'])){
+                        echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."';</script>";
+                    }else{
+                        echo "<script>window.location='manage-properties.php';</script>";
+                    }
+                }elseif(isset($_POST['submit_property_add_tenants'])){
+                    if(isset($_SESSION['nl_focus'])){
+                        echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."&new-tenant=true';</script>";
                 }else{
                     echo "<script>window.location='manage-tenants.php?add-tenant=true&property-id=".$inserted_id."';</script>";
                 }
@@ -746,40 +843,46 @@
 
     //update property
     if(isset($_POST['update_property'])){	
-        $landlord = $_POST['landlord'];
-        $title = $_POST['title'];
-        $description =$_POST['description'];
-        $closest_landmark =$_POST['closest_landmark'];
-        $geo_location_url =$_POST['geo_location_url'];	
-        $address =$_POST['address'];	
-        $city =$_POST['city'];	
-        $state =$_POST['state'];	
-        $country =$_POST['country'];
-        $type =$_POST['type'];	
+        $landlord = intval($_POST['landlord']);
+        $title = InputValidator::sanitizeText($_POST['title']);
+        $description = InputValidator::sanitizeText($_POST['description']);
+        $closest_landmark = InputValidator::sanitizeText($_POST['closest_landmark']);
+        $geo_location_url = InputValidator::sanitizeText($_POST['geo_location_url']);	
+        $address = InputValidator::sanitizeText($_POST['address']);	
+        $city = InputValidator::sanitizeText($_POST['city']);	
+        $state = InputValidator::sanitizeText($_POST['state']);	
+        $country = InputValidator::sanitizeText($_POST['country']);
+        $type = $_POST['type'];	
         if($type == "Rent"){
-            $living__spaces =$_POST['living_spaces'];
+            $living__spaces = intval($_POST['living_spaces']);
         }else if($type == "Sale"){
-            $living__spaces = "";
+            $living__spaces = null;
         }
-        $this_property_id =$_POST['this_property'];	
+        $this_property_id = intval($_POST['this_property']);	
 
-        $update_property = "UPDATE properties set landlord_id='".$landlord."', type='".$type."', title='".$title."', description='".$description."', closest_landmark='".$closest_landmark."', geo_location_url='".$geo_location_url."', location_address='".$address."', location_city='".$city."', location_state='".$state."', location_country='".$country."', no_of_apartments=NULLIF('".$living__spaces."', '') where id='".$this_property_id."'";
-        $post_up = mysqli_query($con, $update_property);
-                                
-        if ($post_up) {
-            $response = "success";
-            $message = "Property updated successfully.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 5;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+        // PHASE 5: Use prepared statement for UPDATE property
+        $stmt = $con->prepare("UPDATE properties SET landlord_id=?, type=?, title=?, description=?, closest_landmark=?, geo_location_url=?, location_address=?, location_city=?, location_state=?, location_country=?, no_of_apartments=NULLIF(?, '') WHERE id=?");
+        if($stmt !== false){
+            $stmt->bind_param("isssssssssii", $landlord, $type, $title, $description, $closest_landmark, $geo_location_url, $address, $city, $state, $country, $living__spaces, $this_property_id);
+            if($stmt->execute()){
+                $stmt->close();
+                $response = "success";
+                $message = "Property updated successfully.";
+                
+                // PHASE 5: Log property update
+                AuditLog::log('PROPERTY_UPDATED', null, $this_property_id, array('type' => $type, 'title' => $title, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
+                
+                $res_sess_duration = 5;
+                $_SESSION['expire'] = time() + $res_sess_duration;
 
-            echo "<script>window.location='".$_SESSION['redirect_url']."';</script>";	
-        } else {
-            $response = "error";
-            $message = "Property update failed. Try again later or contact tech support.";
+                echo "<script>window.location='".$_SESSION['redirect_url']."';</script>";	
+            } else {
+                $stmt->close();
+                $response = "error";
+                $message = "Property update failed. Try again later or contact tech support.";
             
             $_SESSION['response'] = $response;
             $_SESSION['message'] = $message;
@@ -904,42 +1007,69 @@
                 $semiannually_option = "";
                 $annually_option = "selected";
             }
-        $lpd =$_POST['lpd'];
-        $amount_paid = $_POST['amount_paid'];
-        $npd =$_POST['npd'];
-        $pending_amount = $_POST['pending_amount'];
-        $uploader =$_POST['uploader'];
+        $lpd = InputValidator::sanitizeText($_POST['lpd']);
+        $amount_paid = floatval($_POST['amount_paid']);
+        $npd = InputValidator::sanitizeText($_POST['npd']);
+        $pending_amount = floatval($_POST['pending_amount']);
+        $uploader = intval($_POST['uploader']);
 
-        $submit_new_tenant = "INSERT INTO tenants(property_id, flat_number, apartment_type, first_name, last_name, email, phone, pmt_frequency, pmt_amount, uploader_id)values('".$property."','".$flatnumber."','".$apartmenttype."','".mysqli_real_escape_string($con, $firstname)."','".mysqli_real_escape_string($con, $lastname)."','".mysqli_real_escape_string($con, $email)."','".mysqli_real_escape_string($con, $contact)."','".$paymentfrequency."', '".$rentamount."', '".$uploader."')";
-        $post_snt = mysqli_query($con, $submit_new_tenant);
-                                
-        if ($post_snt) {	
-            $inserted_id = mysqli_insert_id($con);
-            
-            //Create and add Tenant ID
-            $tenant_id = "OBT".sprintf("%03d", $inserted_id);
-            $add_tenant_id = "UPDATE tenants set tenant_id='".$tenant_id."' where id='".$inserted_id."'";
-            $post_ati = mysqli_query($con, $add_tenant_id);
+        // PHASE 5: Use prepared statement for INSERT tenant
+        $property_int = intval($property);
+        $paymentfrequency = $_POST['paymentfrequency'];
+        $rentamount = floatval($_POST['rentamount']);
+        $stmt = $con->prepare("INSERT INTO tenants(property_id, flat_number, apartment_type, first_name, last_name, email, phone, pmt_frequency, pmt_amount, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        if($stmt !== false){
+            $stmt->bind_param("isssssssdi", $property_int, $flatnumber, $apartmenttype, $firstname, $lastname, $email, $contact, $paymentfrequency, $rentamount, $uploader);
+            if($stmt->execute()){
+                $inserted_id = $stmt->insert_id;
+                $stmt->close();
+                
+                //Create and add Tenant ID
+                $tenant_id = "OBT".sprintf("%03d", $inserted_id);
+                
+                // PHASE 5: Use prepared statement for tenant_id update
+                $update_stmt = $con->prepare("UPDATE tenants SET tenant_id=? WHERE id=?");
+                $update_stmt->bind_param("si", $tenant_id, $inserted_id);
+                $update_stmt->execute();
+                $update_stmt->close();
 
-            $initiate_payment_history = "INSERT INTO payment_history(tenant_id, due_date, expected_amount, payment_date, paid_amount)values('".$inserted_id."','".$lpd."','".$amount_paid."', '".$lpd."', '".$amount_paid."')";
-            $post_iph = mysqli_query($con, $initiate_payment_history);
+                // PHASE 5: Use prepared statement for payment history INSERT
+                $stmt2 = $con->prepare("INSERT INTO payment_history(tenant_id, due_date, expected_amount, payment_date, paid_amount) VALUES (?, ?, ?, ?, ?)");
+                if($stmt2 !== false){
+                    $stmt2->bind_param("isddd", $inserted_id, $lpd, $amount_paid, $lpd, $amount_paid);
+                    if($stmt2->execute()){
+                        $iph_inserted_id = $stmt2->insert_id;
+                        $iph_inserted_id2 = $iph_inserted_id + 1;
+                        $stmt2->close();
 
-            if($post_iph){
-                $iph_inserted_id = mysqli_insert_id($con);
-                $iph_inserted_id2 = $iph_inserted_id + 1;
+                        //Create and add Payment ID
+                        $payment_id = "OBPH".sprintf("%03d", $iph_inserted_id);
+                        
+                        // PHASE 5: Use prepared statement for payment_id update
+                        $update_stmt2 = $con->prepare("UPDATE payment_history SET payment_id=? WHERE id=?");
+                        $update_stmt2->bind_param("si", $payment_id, $iph_inserted_id);
+                        $update_stmt2->execute();
+                        $update_stmt2->close();
 
-                //Create and add Payment ID
-                $payment_id = "OBPH".sprintf("%03d", $iph_inserted_id);
-                $add_payment_id = "UPDATE payment_history set payment_id='".$payment_id."' where id='".$iph_inserted_id."'";
-                $post_api = mysqli_query($con, $add_payment_id);
+                        $payment_id2 = "OBPH".sprintf("%03d", $iph_inserted_id2);
+                        
+                        // PHASE 5: Use prepared statement for second payment history INSERT
+                        $stmt3 = $con->prepare("INSERT INTO payment_history(payment_id, tenant_id, due_date, expected_amount) VALUES (?, ?, ?, ?)");
+                        if($stmt3 !== false){
+                            $stmt3->bind_param("sisd", $payment_id2, $inserted_id, $npd, $pending_amount);
+                            $stmt3->execute();
+                            $stmt3->close();
+                        }
+                        
+                        // PHASE 5: Log tenant creation
+                        AuditLog::log('TENANT_CREATED', null, $uploader, array('tenant_id' => $tenant_id, 'property_id' => $property_int, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                    } else {
+                        $stmt2->close();
+                    }
+                }
 
-                $payment_id2 = "OBPH".sprintf("%03d", $iph_inserted_id2);
-                $initiate_payment_history2 = "INSERT INTO payment_history(payment_id, tenant_id, due_date, expected_amount)values('".$payment_id2."', '".$inserted_id."','".$npd."','".$pending_amount."')";
-                $post_iph2 = mysqli_query($con, $initiate_payment_history2);
-            }
-
-            $response = "success";
-            $message = "Tenant added successfully.";
+                $response = "success";
+                $message = "Tenant added successfully.";
             
             $_SESSION['response'] = $response;
             $_SESSION['message'] = $message;
@@ -1086,25 +1216,33 @@
                 $semiannually_option = "";
                 $annually_option = "selected";
             }
-        $this_tenant_id =$_POST['this_tenant'];	
+        $this_tenant_id = intval($_POST['this_tenant']);	
 
-        $update_tenant = "UPDATE tenants set property_id='".$property."', flat_number='".$flatnumber."', apartment_type='".mysqli_real_escape_string($con, $apartmenttype)."', first_name='".mysqli_real_escape_string($con, $firstname)."', last_name='".mysqli_real_escape_string($con, $lastname)."', email='".$email."', phone='".$contact."', pmt_frequency='".$paymentfrequency."', pmt_amount='".$rentamount."' where id='".$this_tenant_id."'";
-        $post_ut = mysqli_query($con, $update_tenant);
-                                
-        if ($post_ut) {
-            $response = "success";
-            $message = "Tenant updated successfully.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 5;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+        // PHASE 5: Use prepared statement for UPDATE tenant
+        $property_int = intval($property);
+        $rentamount_float = floatval($rentamount);
+        $stmt = $con->prepare("UPDATE tenants SET property_id=?, flat_number=?, apartment_type=?, first_name=?, last_name=?, email=?, phone=?, pmt_frequency=?, pmt_amount=? WHERE id=?");
+        if($stmt !== false){
+            $stmt->bind_param("isssssssdi", $property_int, $flatnumber, $apartmenttype, $firstname, $lastname, $email, $contact, $paymentfrequency, $rentamount_float, $this_tenant_id);
+            if($stmt->execute()){
+                $stmt->close();
+                $response = "success";
+                $message = "Tenant updated successfully.";
+                
+                // PHASE 5: Log tenant update
+                AuditLog::log('TENANT_UPDATED', null, $this_tenant_id, array('property_id' => $property_int, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
+                
+                $res_sess_duration = 5;
+                $_SESSION['expire'] = time() + $res_sess_duration;
 
-            echo "<script>window.location='manage-tenants.php';</script>";	
-        } else {
-            $response = "error";
-            $message = "Tenant update failed. Try again later or contact tech support.";
+                echo "<script>window.location='manage-tenants.php';</script>";	
+            } else {
+                $stmt->close();
+                $response = "error";
+                $message = "Tenant update failed. Try again later or contact tech support.";
             
             $_SESSION['response'] = $response;
             $_SESSION['message'] = $message;
