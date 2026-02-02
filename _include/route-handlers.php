@@ -2873,7 +2873,8 @@
                     $params = "";
                 }
 
-                echo "<script>window.location='".$_GET['source'].".php".$params."';</script>";	
+                $safe_source = basename($_GET['source']);
+                echo "<script>window.location='".$safe_source.".php".$params."';</script>";	
             }else{
                 $response = "error";
                 $message = "Process failed. Try again later or contact tech support.";
@@ -2909,7 +2910,8 @@
                     $params = "";
                 }
 
-                echo "<script>window.location='".$_GET['source'].".php".$params."';</script>";	
+                $safe_source = basename($_GET['source']);
+                echo "<script>window.location='".$safe_source.".php".$params."';</script>";	
             }else{
                 $response = "error";
                 $message = "Process failed. Try again later or contact tech support.";
@@ -2945,7 +2947,8 @@
                     $params = "";
                 }
 
-                echo "<script>window.location='".$_GET['source'].".php".$params."';</script>";	
+                $safe_source = basename($_GET['source']);
+                echo "<script>window.location='".$safe_source.".php".$params."';</script>";	
             }else{
                 $response = "error";
                 $message = "Process failed. Try again later or contact tech support.";

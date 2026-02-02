@@ -4,8 +4,12 @@
 	include("_include/header.php");
 
 	if(isset($_GET['id'])){
-		$retrieve_all_users = "select * from users where id='".$_GET['id']."'";
-		$rau_result = $con->query($retrieve_all_users);
+		// SECURITY: Use prepared statement to prevent SQL injection
+		$user_id = intval($_GET['id']);
+		$stmt = $con->prepare("SELECT * FROM users WHERE id=?");
+		$stmt->bind_param("i", $user_id);
+		$stmt->execute();
+		$rau_result = $stmt->get_result();
 		while($row = $rau_result->fetch_assoc())
 		{
 			$_first_name=$row['first_name'];
@@ -25,6 +29,7 @@
 				$_role = "Agent";
 			}
 		}
+		$stmt->close();
 	}
 ?>
 		<!--**********************************
@@ -156,8 +161,8 @@
 															</tbody>
 														</table>
 														<input type='hidden' name='access_target' value='property'>
-														<input type='hidden' name='user_role' value='<?php echo $_role; ?>'>
-														<input type='hidden' name='user_id' value='<?php echo $_GET['id']; ?>'>
+														<input type='hidden' name='user_role' value='<?php echo htmlspecialchars($_role, ENT_QUOTES, 'UTF-8'); ?>'>
+														<input type='hidden' name='user_id' value='<?php echo htmlspecialchars($_GET['id'], ENT_QUOTES, 'UTF-8'); ?>'>
 													</div>
 												</div>
 											</div>
@@ -228,8 +233,8 @@
 															</tbody>
 														</table>
 														<input type='hidden' name='access_target' value='landlord'>
-														<input type='hidden' name='user_role' value='<?php echo $_role; ?>'>
-														<input type='hidden' name='user_id' value='<?php echo $_GET['id']; ?>'>
+														<input type='hidden' name='user_role' value='<?php echo htmlspecialchars($_role, ENT_QUOTES, 'UTF-8'); ?>'>
+														<input type='hidden' name='user_id' value='<?php echo htmlspecialchars($_GET['id'], ENT_QUOTES, 'UTF-8'); ?>'>
 													</div>
 												</div>
 											</div>
@@ -314,8 +319,8 @@
 															</tbody>
 														</table>
 														<input type='hidden' name='access_target' value='tenant'>
-														<input type='hidden' name='user_role' value='<?php echo $_role; ?>'>
-														<input type='hidden' name='user_id' value='<?php echo $_GET['id']; ?>'>
+														<input type='hidden' name='user_role' value='<?php echo htmlspecialchars($_role, ENT_QUOTES, 'UTF-8'); ?>'>
+														<input type='hidden' name='user_id' value='<?php echo htmlspecialchars($_GET['id'], ENT_QUOTES, 'UTF-8'); ?>'>>
 													</div>
 												</div>
 											</div>
@@ -399,8 +404,8 @@
 															</tbody>
 														</table>
 														<input type='hidden' name='access_target' value='agent'>
-														<input type='hidden' name='user_role' value='<?php echo $_role; ?>'>
-														<input type='hidden' name='user_id' value='<?php echo $_GET['id']; ?>'>
+														<input type='hidden' name='user_role' value='<?php echo htmlspecialchars($_role, ENT_QUOTES, 'UTF-8'); ?>'>
+														<input type='hidden' name='user_id' value='<?php echo htmlspecialchars($_GET['id'], ENT_QUOTES, 'UTF-8'); ?>'>
 													</div>
 												</div>
 											</div>

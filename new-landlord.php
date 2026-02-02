@@ -94,8 +94,8 @@
 							<hr>
 							<a href="new-landlord.php" class="btn btn-primary me-1">Add Landlord</a>
 							<div style="margin-top: 15px;">
-								<a href="new-landlord.php?landlord-id=<?php echo $_GET['landlord-id']; ?>" class="btn btn-secondary me-1">Add Property</a>
-								<a href="new-landlord.php?landlord-id=<?php echo $_GET['landlord-id']; ?>&new-tenant=true" class="btn btn-warning me-1">Add Tenants</a>
+								<a href="new-landlord.php?landlord-id=<?php echo htmlspecialchars($_GET['landlord-id'], ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-secondary me-1">Add Property</a>
+								<a href="new-landlord.php?landlord-id=<?php echo htmlspecialchars($_GET['landlord-id'], ENT_QUOTES, 'UTF-8'); ?>&new-tenant=true" class="btn btn-warning me-1">Add Tenants</a>
 							</div>
 							<?php
 								}
@@ -253,7 +253,7 @@
 							</div>
 							<div>
 								<button type="submit" name="submit_new_tenant" value='1' class="btn btn-primary me-1">Submit Tenant</button>
-								<!--<a href="new-landlord.php?landlord-id=<?php echo $_GET['landlord-id']; ?>" class="btn btn-secondary me-1">Add another property</a>-->
+								<!--<a href="new-landlord.php?landlord-id=<?php echo htmlspecialchars($_GET['landlord-id'], ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-secondary me-1">Add another property</a>-->
 							</div>
 						</form>
 					</div>
@@ -349,7 +349,7 @@
 								<div class="col-xl-12 mb-3">
 									<label for="title" class="form-label">Title (Name of Property)<span class="text-danger">*</span></label>
 									<input type="text" id="title" class="form-control" id="title" name="title" value="<?php echo $title; ?>" required placeholder="">
-									<input type="hidden" name="landlord" value="<?php echo $_GET['landlord-id']; ?>">
+										<input type="hidden" name="landlord" value="<?php echo htmlspecialchars($_GET['landlord-id'], ENT_QUOTES, 'UTF-8'); ?>">
 									<input type="hidden" name="landlord_input_type" value="existing">
 								</div>
 								<div class="col-xl-12 mb-3">
@@ -425,7 +425,7 @@
 							</div>
 							<div>
 								<button type="submit" name="submit_new_property" value='1' class="btn btn-primary me-1">Submit property</button>
-								<!--<a href="new-landlord.php?landlord-id=<?php echo $_GET['landlord-id']; ?>&new-tenant=true" class="btn btn-warning me-1">Add Tenants</a>-->
+								<!--<a href="new-landlord.php?landlord-id=<?php echo htmlspecialchars($_GET['landlord-id'], ENT_QUOTES, 'UTF-8'); ?>&new-tenant=true" class="btn btn-warning me-1">Add Tenants</a>-->
 							</div>
 						</form>
 					</div>
