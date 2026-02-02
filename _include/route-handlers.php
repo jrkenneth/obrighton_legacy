@@ -1,50 +1,78 @@
 <?php
 
-//--Start Counts
-    //Active Agents count
-    $active_agent_count_query="SELECT * FROM users WHERE role_id='3' and dashboard_access='1'";
-    $run_aacq=mysqli_query($con, $active_agent_count_query);
-    $active_agents_count = mysqli_num_rows($run_aacq);
+//--Start Counts - PHASE 5: Convert to prepared statements
+    // PHASE 5: Active Agents count
+    $stmt = $con->prepare("SELECT COUNT(*) as count FROM users WHERE role_id=3 AND dashboard_access=1");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $active_agents_count = $row['count'];
+    $stmt->close();
 
-    //Rental Properties count
-    $properties_rent_count_query="SELECT * FROM properties where type='Rent'";
-    $run_prcq=mysqli_query($con, $properties_rent_count_query);
-    $rent_properties_count = mysqli_num_rows($run_prcq);
+    // PHASE 5: Rental Properties count
+    $stmt = $con->prepare("SELECT COUNT(*) as count FROM properties WHERE type='Rent'");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $rent_properties_count = $row['count'];
+    $stmt->close();
 
-    //Sale Properties count
-    $properties_sale_count_query="SELECT * FROM properties where type='Sale'";
-    $run_pscq=mysqli_query($con, $properties_sale_count_query);
-    $sale_properties_count = mysqli_num_rows($run_pscq);
+    // PHASE 5: Sale Properties count
+    $stmt = $con->prepare("SELECT COUNT(*) as count FROM properties WHERE type='Sale'");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $sale_properties_count = $row['count'];
+    $stmt->close();
 
-    //Active Listings count
-    $active_listings_count_query="SELECT * FROM listings where status='1'";
-    $run_alcq=mysqli_query($con, $active_listings_count_query);
-    $active_listings_count = mysqli_num_rows($run_alcq);
+    // PHASE 5: Active Listings count
+    $stmt = $con->prepare("SELECT COUNT(*) as count FROM listings WHERE status=1");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $active_listings_count = $row['count'];
+    $stmt->close();
 
-    //Active Tenants count
-    $occupant_tenants_count_query="SELECT * FROM tenants where occupant_status='1'";
-    $run_otcq=mysqli_query($con, $occupant_tenants_count_query);
-    $occupant_tenants_count = mysqli_num_rows($run_otcq);
+    // PHASE 5: Active Tenants count
+    $stmt = $con->prepare("SELECT COUNT(*) as count FROM tenants WHERE occupant_status=1");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $occupant_tenants_count = $row['count'];
+    $stmt->close();
 
-    //All Landlords count
-    $landlords_count_query="SELECT * FROM landlords where 1";
-    $run_lcq=mysqli_query($con, $landlords_count_query);
-    $all_landlords_count = mysqli_num_rows($run_lcq);
+    // PHASE 5: All Landlords count
+    $stmt = $con->prepare("SELECT COUNT(*) as count FROM landlords");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $all_landlords_count = $row['count'];
+    $stmt->close();
 
-    //Successful Rent Notifications count
-    // $rent_notifications_count_query="SELECT * FROM rent_notification_status";
-    // $run_rncq=mysqli_query($con, $rent_notifications_count_query);
-    // $successful_rent_notifications_count = mysqli_num_rows($run_rncq);
+    // PHASE 5: Successful Rent Notifications count
+    // $stmt = $con->prepare("SELECT COUNT(*) as count FROM rent_notification_status");
+    // $stmt->execute();
+    // $result = $stmt->get_result();
+    // $row = $result->fetch_assoc();
+    // $successful_rent_notifications_count = $row['count'];
+    // $stmt->close();
 
-    //Active Users count
-    $active_users_count_query="SELECT * FROM users where dashboard_access='1'";
-    $run_aucq=mysqli_query($con, $active_users_count_query);
-    $active_users_count = mysqli_num_rows($run_aucq);
+    // PHASE 5: Active Users count
+    $stmt = $con->prepare("SELECT COUNT(*) as count FROM users WHERE dashboard_access=1");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $active_users_count = $row['count'];
+    $stmt->close();
 
-    //Number of new notifications
-    $new_notifications_query="SELECT * FROM notifications where target_id='".$this_user."' and view_status='0'";
-    $run_nnq=mysqli_query($con, $new_notifications_query);
-    $new_notifications = mysqli_num_rows($run_nnq);
+    // PHASE 5: Number of new notifications
+    $stmt = $con->prepare("SELECT COUNT(*) as count FROM notifications WHERE target_id=? AND view_status=0");
+    $stmt->bind_param("i", $this_user);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $new_notifications = $row['count'];
+    $stmt->close();
 //--End Counts
 
     //send mail function
