@@ -44,8 +44,7 @@ if(isset($_GET['q'])){
 	<!-- Style css -->
     <link href="css/style.css" rel="stylesheet">
 	
-	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <script src="https://code.jquery.com/jquery-latest.js"></script>
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
     <script>
         function alertTimer(){

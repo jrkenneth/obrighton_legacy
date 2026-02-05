@@ -1,25 +1,61 @@
 <?php
-    
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
     include("dbconnect.php");
-    $this_user = $_SESSION['this_user'];
-    $get_user = "select * from users where id='".$this_user."'";
-    $gu_result = $con->query($get_user);
-    while($row = $gu_result->fetch_assoc())
-    {
-        $tu_role_id=$row['role_id'];
+    
+    // Validate session variable
+    if(!isset($_SESSION['this_user']) || empty($_SESSION['this_user'])){
+        echo "<li><h6 style='text-align: center;'>No notifications</h6></li>";
+        mysqli_close($con);
+        exit;
     }
-    if($tu_role_id == "1"){
-        $tu_role = "admin";
-    }elseif($tu_role_id == "2"){
-        $tu_role = "editor";
-    }elseif($tu_role_id == "3"){
-        $tu_role = "agent";
+    
+    $this_user = intval($_SESSION['this_user']);
+    
+    // SECURITY: Use prepared statement to get user role
+    $stmt = $con->prepare("SELECT role_id FROM users WHERE id=?");
+    if (!$stmt) {
+        echo "<li><h6 style='text-align: center;'>No notifications</h6></li>";
+        mysqli_close($con);
+        exit;
     }
-?>
-<?php
-    $retrieve_latest_notifications = "select * from notifications WHERE `for`='".$tu_role."' and target_id='".$this_user."' order by id desc limit 0,5"; 
-    $run_rln=mysqli_query($con, $retrieve_latest_notifications);
-    $notifications_count = mysqli_num_rows($run_rln);
+    $stmt->bind_param("i", $this_user);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if($row = $result->fetch_assoc()){
+        $tu_role_id = $row['role_id'];
+        
+        if($tu_role_id == "1"){
+            $tu_role = "admin";
+        }elseif($tu_role_id == "2"){
+            $tu_role = "editor";
+        }elseif($tu_role_id == "3"){
+            $tu_role = "agent";
+        }else{
+            $tu_role = "unknown";
+        }
+    }else{
+        echo "<li><h6 style='text-align: center;'>Error loading notifications</h6></li>";
+        $stmt->close();
+        mysqli_close($con);
+        exit;
+    }
+    $stmt->close();
+    
+    // SECURITY: Use prepared statement to retrieve notifications
+    $stmt = $con->prepare("SELECT id, `for`, target_id, title, details, view_status, date FROM notifications WHERE `for`=? AND target_id=? ORDER BY id DESC LIMIT 5");
+    if (!$stmt) {
+        echo "<li><h6 style='text-align: center;'>No notifications</h6></li>";
+        mysqli_close($con);
+        exit;
+    }
+    $stmt->bind_param("si", $tu_role, $this_user);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $notifications_count = $result->num_rows;
     
     if($notifications_count < 1){
         echo "
@@ -28,10 +64,10 @@
             </li>
         ";
     }else{
-        while($row = mysqli_fetch_array($run_rln)) { 
-            $notification_date=date("jS M, Y - h:ia", strtotime($row['date']));
-            $notification_message=$row['notification'];
-            $notification_status=$row['status'];
+        while($row = $result->fetch_assoc()) { 
+            $notification_date = date("jS M, Y - h:ia", strtotime($row['date']));
+            $notification_message = htmlspecialchars($row['details'], ENT_QUOTES, 'UTF-8');
+            $notification_status = $row['status'];
 
             if($notification_status == "0"){
                 $title_icon_color = "indianred";
@@ -58,5 +94,7 @@
             ";
         }
     }
+    
+    $stmt->close();
     mysqli_close($con);
 ?>

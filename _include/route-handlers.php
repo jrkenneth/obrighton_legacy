@@ -117,7 +117,7 @@
     if( isset($_POST['login']) ){
         // SECURITY: Validate CSRF token first
         if(!CSRFProtection::validateToken($_POST['csrf_token'] ?? '')){
-            AuditLog::log('LOGIN_CSRF_FAILED', null, $_POST['user'] ?? 'unknown', array('reason' => 'Invalid CSRF token'), 'CRITICAL');
+            AuditLog::log('LOGIN_CSRF_FAILED', 'login_attempts', 0, null, array('reason' => 'Invalid CSRF token', 'user' => $_POST['user'] ?? 'unknown'));
             $message = "<span class='text-danger'>Security check failed. Please try logging in again.</span>";
         } else {
             // SECURITY: Input validation
@@ -133,7 +133,7 @@
                 // SECURITY: Use prepared statement to prevent SQL injection
                 $stmt = $con->prepare("SELECT id, password, dashboard_access, first_name, role_id FROM users WHERE email=? OR user_id=?");
                 if($stmt === false){
-                    AuditLog::log('LOGIN_QUERY_FAILED', null, $user, array('reason' => 'Prepare failed: ' . $con->error), 'ERROR');
+                    AuditLog::log('LOGIN_QUERY_FAILED', 'users', 0, null, array('reason' => 'Prepare failed: ' . $con->error, 'user' => $user));
                     $message = "<span class='text-danger'>Login system error. Please try again later.</span>";
                 } else {
                     $stmt->bind_param("ss", $user, $user);
@@ -159,25 +159,25 @@
                                 $update_stmt->close();
                                 
                                 // SECURITY: Log successful login
-                                AuditLog::log('LOGIN_SUCCESS', null, $id, array('user' => $user, 'timestamp' => $date_time), 'INFO');
+                                AuditLog::log('LOGIN_SUCCESS', 'users', $id, null, array('user' => $user, 'timestamp' => $date_time), $id);
                                 
                                 $message = "<span class='text-success'>Login attempt successful, Welcome ".$first_name."!</span>";
                                 echo "<meta http-equiv='refresh' content='3; url=index.php' >";
                             } else {
                                 // SECURITY: Log failed password attempt
-                                AuditLog::log('LOGIN_FAILED_PASSWORD', null, $user, array('reason' => 'Password mismatch', 'timestamp' => date('Y-m-d H:i:s')), 'WARNING');
+                                AuditLog::log('LOGIN_FAILED_PASSWORD', 'users', $id, null, array('reason' => 'Password mismatch', 'user' => $user, 'timestamp' => date('Y-m-d H:i:s')));
                                 $message = "<span class='text-danger'>Login attempt failed. Incorrect password provided, try again.</span>";
                             }
                         } elseif($dashboard_access == "0"){
-                            AuditLog::log('LOGIN_FAILED_INACTIVE', null, $user, array('reason' => 'Account not activated'), 'WARNING');
+                            AuditLog::log('LOGIN_FAILED_INACTIVE', 'users', $id, null, array('reason' => 'Account not activated', 'user' => $user));
                             $message = "<span class='text-danger'>Login attempt failed. Account not activated.<br> Check your email for activation link.</span>";
                         } elseif($dashboard_access == "2"){
-                            AuditLog::log('LOGIN_FAILED_SUSPENDED', null, $user, array('reason' => 'Account suspended'), 'WARNING');
+                            AuditLog::log('LOGIN_FAILED_SUSPENDED', 'users', $id, null, array('reason' => 'Account suspended', 'user' => $user));
                             $message = "<span class='text-danger'>This account has been suspended!<br> Contact Admin at <a href='tel:+2349041243809' style='font-weight: bold;' class='text-primary'>(+234)904-124-3809</a> for more details.</span>";
                         }
                     } else {
                         // SECURITY: Log user not found attempt
-                        AuditLog::log('LOGIN_FAILED_NOTFOUND', null, $user, array('reason' => 'User not found', 'timestamp' => date('Y-m-d H:i:s')), 'WARNING');
+                        AuditLog::log('LOGIN_FAILED_NOTFOUND', 'users', 0, null, array('reason' => 'User not found', 'user' => $user, 'timestamp' => date('Y-m-d H:i:s')));
                         $message = "<span class='text-danger'>Login attempt failed. User not found, try again.</span>";
                     }
                     $stmt->close();
@@ -203,7 +203,7 @@
                 $stmt->bind_param("ss", $hash, $user_id);
                 if($stmt->execute()){
                     // PHASE 5: Log password change
-                    AuditLog::log('PASSWORD_CHANGED', null, $user_id, array('action' => 'User account activated', 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                    AuditLog::log('PASSWORD_CHANGED', 'users', 0, null, array('action' => 'User account activated', 'user_id' => $user_id, 'timestamp' => date('Y-m-d H:i:s')));
                     
                     unset($_SESSION["user_id"]);
                     $message = "<span class='text-success'>Congrats ".$first_name.", your password has been set successfully and your account is active. You'll be redirected to the Login page shortly.</span>";
@@ -239,7 +239,7 @@
                     $stmt->bind_param("sisi", $user_role, $user_id, $access_target, $_target_id);
                     if($stmt->execute()){
                         // Log access grant
-                        AuditLog::log('ACCESS_GRANTED', null, $user_id, array('target' => $access_target, 'target_id' => $_target_id), 'INFO');
+                        AuditLog::log('ACCESS_GRANTED', 'access_mgt', $user_id, null, array('target' => $access_target, 'target_id' => $_target_id), $user_id);
                     }
                     $stmt->close();
                 }
@@ -318,16 +318,20 @@
         }
 		$access_target = $_POST['access_target'];
 		$user_role = $_POST['user_role'];
-		$user_id = $_POST['user_id'];
+		$user_id = intval($_POST['user_id']);
 		
         if(!empty($tenants)){
-            foreach ($tenants as $tenant){ 
-                $_target_id = $tenant;
-                
-                $add_tenant_access="INSERT INTO access_mgt(user_role, user_id, target, target_id)values('".$user_role."', '".$user_id."', '".$access_target."', '".$_target_id."')";
-                $run_ata=mysqli_query($con,$add_tenant_access);		
+            // PHASE 5: Use prepared statement for tenant access
+            $stmt = $con->prepare("INSERT INTO access_mgt(user_role, user_id, target, target_id) VALUES (?, ?, ?, ?)");
+            if($stmt !== false){
+                foreach ($tenants as $tenant){ 
+                    $_target_id = intval($tenant);
+                    $stmt->bind_param("sisi", $user_role, $user_id, $access_target, $_target_id);
+                    $stmt->execute();
+                }
+                $stmt->close();
             }
-
+            
             $response = "success";
             $message = "Changes updated successfully.";
 
@@ -359,14 +363,18 @@
         }
 		$access_target = $_POST['access_target'];
 		$user_role = $_POST['user_role'];
-		$user_id = $_POST['user_id'];
+		$user_id = intval($_POST['user_id']);
 		
         if(!empty($agents)){
-            foreach ($agents as $agent){ 
-                $_target_id = $agent;
-                
-                $add_agent_access="INSERT INTO access_mgt(user_role, user_id, target, target_id)values('".$user_role."', '".$user_id."', '".$access_target."', '".$_target_id."')";
-                $run_aaa=mysqli_query($con,$add_agent_access);		
+            // PHASE 5: Use prepared statement for agent access
+            $stmt = $con->prepare("INSERT INTO access_mgt(user_role, user_id, target, target_id) VALUES (?, ?, ?, ?)");
+            if($stmt !== false){
+                foreach ($agents as $agent){ 
+                    $_target_id = intval($agent);
+                    $stmt->bind_param("sisi", $user_role, $user_id, $access_target, $_target_id);
+                    $stmt->execute();
+                }
+                $stmt->close();
             }
 
             $response = "success";
@@ -458,7 +466,7 @@
                     $update_stmt->close();
 
                     // PHASE 5: Log user creation
-                    AuditLog::log('USER_CREATED', null, $inserted_id, array('email' => $email_address, 'role' => $role, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                    AuditLog::log('INSERT', 'users', $inserted_id, null, array('email' => $email_address, 'role' => $role, 'user_id' => $user_id, 'timestamp' => date('Y-m-d H:i:s')), $this_user);
 
                     if(!empty($profile_picture)){
                         $ifile_tmp=$_FILES['profile_picture']['tmp_name'];
@@ -611,7 +619,7 @@
                     $message = "User updated successfully.";
                     
                     // PHASE 5: Log user update
-                    AuditLog::log('USER_UPDATED', null, $current_id, array('email' => $email_address, 'role' => $role, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                    AuditLog::log('UPDATE', 'users', $current_id, null, array('email' => $email_address, 'role' => $role, 'timestamp' => date('Y-m-d H:i:s')), $this_user);
                 
                     $_SESSION['response'] = $response;
                     $_SESSION['message'] = $message;
@@ -644,6 +652,235 @@
         }
     }
 
+    //update own profile (basic info)
+    if(isset($_POST['update_profile'])){
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
+
+        $first_name = InputValidator::sanitizeText($_POST['first_name'] ?? '', 100);
+        $last_name = InputValidator::sanitizeText($_POST['last_name'] ?? '', 100);
+        $address = InputValidator::sanitizeText($_POST['address'] ?? '', 255);
+        $phone_raw = $_POST['phone_number'] ?? '';
+        $phone_number = '';
+
+        if ($phone_raw !== '') {
+            $phone_number = InputValidator::validatePhone($phone_raw);
+            if ($phone_number === false) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid phone number format.';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='profile.php';</script>";
+                exit;
+            }
+        }
+
+        if ($first_name === '' || $last_name === '') {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'First name and last name are required.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $stmt = $con->prepare("UPDATE users SET first_name=?, last_name=?, phone_number=?, address=? WHERE id=?");
+        if ($stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Profile update failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $stmt->bind_param("ssssi", $first_name, $last_name, $phone_number, $address, $this_user);
+        if ($stmt->execute()) {
+            $stmt->close();
+
+            AuditLog::log('UPDATE', 'users', $this_user, null, array(
+                'first_name' => $first_name,
+                'last_name' => $last_name,
+                'phone_number' => $phone_number,
+                'address' => $address,
+                'timestamp' => date('Y-m-d H:i:s')
+            ), $this_user);
+
+            $_SESSION['response'] = 'success';
+            $_SESSION['message'] = 'Profile updated successfully.';
+            $_SESSION['expire'] = time() + 5;
+        } else {
+            $stmt->close();
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Profile update failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+        }
+
+        echo "<script>window.location='profile.php';</script>";
+        exit;
+    }
+
+    //update own password
+    if(isset($_POST['update_password'])){
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
+
+        $current_password = $_POST['current_password'] ?? '';
+        $new_password = $_POST['new_password'] ?? '';
+        $confirmed_password = $_POST['confirmed_password'] ?? '';
+
+        if ($new_password === '' || $confirmed_password === '' || $current_password === '') {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'All password fields are required.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        if ($new_password !== $confirmed_password) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Passwords do not match. Please confirm your new password.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $stmt = $con->prepare("SELECT password FROM users WHERE id=?");
+        if ($stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password update failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $stmt->bind_param("i", $this_user);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+
+        if (!$row || !password_verify($current_password, $row['password'])) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Incorrect current password.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+        $update_stmt = $con->prepare("UPDATE users SET password=? WHERE id=?");
+        if ($update_stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password update failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $update_stmt->bind_param("si", $new_hash, $this_user);
+        if ($update_stmt->execute()) {
+            $update_stmt->close();
+
+            AuditLog::log('UPDATE', 'users', $this_user, null, array(
+                'action' => 'password_change',
+                'timestamp' => date('Y-m-d H:i:s')
+            ), $this_user);
+
+            $_SESSION['response'] = 'success';
+            $_SESSION['message'] = 'Password updated successfully.';
+            $_SESSION['expire'] = time() + 5;
+        } else {
+            $update_stmt->close();
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password update failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+        }
+
+        echo "<script>window.location='profile.php';</script>";
+        exit;
+    }
+
+    //update own profile picture
+    if(isset($_POST['update_profile_picture'])){
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
+
+        $current_picture = $_POST['current_picture'] ?? '';
+        $file = $_FILES['profile_picture'] ?? null;
+
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Please select a valid image file.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $original_name = $file['name'];
+        $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+        $allowed = array('jpg', 'jpeg', 'png');
+
+        if (!in_array($extension, $allowed, true)) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Only JPG and PNG images are allowed.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $safe_name = preg_replace('/[^A-Za-z0-9._-]/', '_', $original_name);
+
+        if ($safe_name === '') {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Invalid image file name.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        if (!empty($current_picture) && $current_picture !== 'icon_user_default.png') {
+            $path = "file_uploads/users/" . $current_picture;
+            if (file_exists($path)) {
+                unlink($path);
+            }
+        }
+
+        if (!move_uploaded_file($file['tmp_name'], "file_uploads/users/" . $safe_name)) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Failed to upload profile picture.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $stmt = $con->prepare("UPDATE users SET profile_picture=? WHERE id=?");
+        if ($stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Profile picture update failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='profile.php';</script>";
+            exit;
+        }
+
+        $stmt->bind_param("si", $safe_name, $this_user);
+        if ($stmt->execute()) {
+            $stmt->close();
+
+            AuditLog::log('UPDATE', 'users', $this_user, null, array(
+                'action' => 'profile_picture_update',
+                'file' => $safe_name,
+                'timestamp' => date('Y-m-d H:i:s')
+            ), $this_user);
+
+            $_SESSION['response'] = 'success';
+            $_SESSION['message'] = 'Profile picture updated successfully.';
+            $_SESSION['expire'] = time() + 5;
+        } else {
+            $stmt->close();
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Profile picture update failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+        }
+
+        echo "<script>window.location='profile.php';</script>";
+        exit;
+    }
+
     //add new landlord
     if(isset($_POST['submit_new_landlord']) || isset($_POST['submit_landlord_add_property'])){
         $first_name = InputValidator::sanitizeText($_POST['first_name'] ?? '');
@@ -670,7 +907,7 @@
                 $update_stmt->close();
                 
                 // PHASE 5: Log landlord creation
-                AuditLog::log('LANDLORD_CREATED', null, $uploader, array('landlord_id' => $landlord_id, 'email' => $email_address, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                AuditLog::log('INSERT', 'landlords', $inserted_id, null, array('landlord_id' => $landlord_id, 'email' => $email_address, 'timestamp' => date('Y-m-d H:i:s')), $uploader);
 
                 $response = "success";
                 $message = "New landlord listed successfully.";
@@ -733,7 +970,7 @@
                 $reset_stmt->bind_param("si", $landlord_password_hash, $this_landlord_id);
                 $reset_stmt->execute();
                 $reset_stmt->close();
-                AuditLog::log('LANDLORD_PASSWORD_RESET', null, $this_landlord_id, array('timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                AuditLog::log('UPDATE', 'landlords', $this_landlord_id, null, array('action' => 'password_reset', 'timestamp' => date('Y-m-d H:i:s')), $this_user);
             }
         }
                                 
@@ -742,7 +979,7 @@
             $message = "Landlord updated successfully.";
             
             // PHASE 5: Log landlord update
-            AuditLog::log('LANDLORD_UPDATED', null, $this_landlord_id, array('email' => $email_address, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+            AuditLog::log('UPDATE', 'landlords', $this_landlord_id, null, array('email' => $email_address, 'timestamp' => date('Y-m-d H:i:s')), $this_user);
             
             $_SESSION['response'] = $response;
             $_SESSION['message'] = $message;
@@ -812,7 +1049,7 @@
                     $update_stmt->execute();
                     $update_stmt->close();
                     
-                    AuditLog::log('LANDLORD_CREATED_FOR_PROPERTY', null, $uploader_int, array('landlord_id' => $landlord_id), 'INFO');
+                    AuditLog::log('INSERT', 'landlords', $landlord, null, array('landlord_id' => $landlord_id, 'created_for' => 'property'), $uploader_int);
                 } else {
                     $stmt->close();
                 }
@@ -838,7 +1075,7 @@
                 $update_stmt->execute();
                 $update_stmt->close();
                 
-                AuditLog::log('PROPERTY_CREATED', null, $uploader_int, array('property_id' => $property_id, 'type' => $type, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                AuditLog::log('INSERT', 'properties', $inserted_id, null, array('property_id' => $property_id, 'type' => $type, 'timestamp' => date('Y-m-d H:i:s')), $uploader_int);
 
                 $response = "success";
                 $message = "Property added successfully.";
@@ -904,7 +1141,7 @@
                 $message = "Property updated successfully.";
                 
                 // PHASE 5: Log property update
-                AuditLog::log('PROPERTY_UPDATED', null, $this_property_id, array('type' => $type, 'title' => $title, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                AuditLog::log('UPDATE', 'properties', $this_property_id, null, array('type' => $type, 'title' => $title, 'timestamp' => date('Y-m-d H:i:s')), $this_user);
                 
                 $_SESSION['response'] = $response;
                 $_SESSION['message'] = $message;
@@ -1097,7 +1334,7 @@
                         }
                         
                         // PHASE 5: Log tenant creation
-                        AuditLog::log('TENANT_CREATED', null, $uploader, array('tenant_id' => $tenant_id, 'property_id' => $property_int, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                        AuditLog::log('INSERT', 'tenants', $inserted_id, null, array('tenant_id' => $tenant_id, 'property_id' => $property_int, 'timestamp' => date('Y-m-d H:i:s')), $uploader);
                     } else {
                         $stmt2->close();
                     }
@@ -1266,7 +1503,7 @@
                 $message = "Tenant updated successfully.";
                 
                 // PHASE 5: Log tenant update
-                AuditLog::log('TENANT_UPDATED', null, $this_tenant_id, array('property_id' => $property_int, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                AuditLog::log('UPDATE', 'tenants', $this_tenant_id, null, array('property_id' => $property_int, 'timestamp' => date('Y-m-d H:i:s')), $this_user);
                 
                 $_SESSION['response'] = $response;
                 $_SESSION['message'] = $message;
@@ -1329,7 +1566,7 @@
                     }
                     
                     // PHASE 5: Log payment creation
-                    AuditLog::log('PAYMENT_RECORDED', null, $tenant_id, array('payment_id' => $payment_id, 'amount' => $paid_amount, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                    AuditLog::log('INSERT', 'payment_history', $inserted_id, null, array('payment_id' => $payment_id, 'tenant_id' => $tenant_id, 'amount' => $paid_amount, 'timestamp' => date('Y-m-d H:i:s')), $this_user);
                     $post_sph = true;
                 
                     $response = "success";
@@ -1435,7 +1672,7 @@
                 $message = "Record updated successfully.";
                 
                 // PHASE 5: Log payment update
-                AuditLog::log('PAYMENT_UPDATED', null, $tenant_id, array('record_id' => $record_id, 'amount' => $amount_due, 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                AuditLog::log('UPDATE', 'payment_history', $record_id, null, array('tenant_id' => $tenant_id, 'amount' => $amount_due, 'timestamp' => date('Y-m-d H:i:s')), $this_user);
                 
                 $_SESSION['response'] = $response;
                 $_SESSION['message'] = $message;
@@ -1838,7 +2075,7 @@
                     }
                     
                     // PHASE 5: Log artisan creation
-                    AuditLog::log('ARTISAN_CREATED', null, $_uploader, array('artisan_id' => $inserted_id, 'services_count' => count($services), 'timestamp' => date('Y-m-d H:i:s')), 'INFO');
+                    AuditLog::log('INSERT', 'artisans', $inserted_id, null, array('artisan_id' => $inserted_id, 'services_count' => count($services), 'timestamp' => date('Y-m-d H:i:s')), $_uploader);
 
                     $response = "success";
                     $message = "Service provider added successfully.";

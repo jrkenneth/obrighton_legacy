@@ -28,21 +28,32 @@
             exit;
         }
 
-        $get_user = "select * from users where id='".$this_user."'";
-        $gu_result = $con->query($get_user);
-        while($row = $gu_result->fetch_assoc())
+        // SECURITY: Use prepared statement to prevent SQL injection
+        $stmt = $con->prepare("SELECT first_name, last_name, profile_picture, email, phone_number, address, user_id, role_id, dashboard_access, last_login FROM users WHERE id=?");
+        $stmt->bind_param("i", $this_user);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if($row = $result->fetch_assoc())
         {
-            $tu_first_name=$row['first_name'];
-            $tu_last_name=$row['last_name'];
-            $tu_profile_picture=$row['profile_picture'];
-            $tu_email=$row['email'];
-            $tu_phone_number=$row['phone_number'];
-            $tu_address=$row['address'];
-            $tu_user_id=$row['user_id'];
-            $tu_role_id=$row['role_id'];
-            $tu_dashboard_access=$row['dashboard_access'];
-            $tu_last_login=$row['last_login'];
+            $tu_first_name = $row['first_name'];
+            $tu_last_name = $row['last_name'];
+            $tu_profile_picture = $row['profile_picture'];
+            $tu_email = $row['email'];
+            $tu_phone_number = $row['phone_number'];
+            $tu_address = $row['address'];
+            $tu_user_id = $row['user_id'];
+            $tu_role_id = $row['role_id'];
+            $tu_dashboard_access = $row['dashboard_access'];
+            $tu_last_login = $row['last_login'];
+        } else {
+            // User not found, force logout
+            $stmt->close();
+            unset($_SESSION['this_user']);
+            echo "<script>window.location='login.php';</script>";
+            exit;
         }
+        $stmt->close();
 
         if($tu_dashboard_access != '1'){
             unset($_SESSION['this_user']);

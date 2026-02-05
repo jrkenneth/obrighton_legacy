@@ -6,7 +6,10 @@
  var dzChartlist = function(){
 	
 	var screenWidth = $(window).width();
-	let draw = Chart.controllers.line.__super__.draw; //draw shadow
+	let draw = null; // draw shadow when Chart.js supports it
+	if (window.Chart && Chart.controllers && Chart.controllers.line && Chart.controllers.line.__super__) {
+		draw = Chart.controllers.line.__super__.draw;
+	}
 	
 	var NewCustomers = function(){
 		var options = {
