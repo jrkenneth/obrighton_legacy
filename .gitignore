@@ -128,6 +128,7 @@ nbdist/
 # ========================================
 composer.phar
 composer.lock
+/_oldvendor/
 phpunit.xml
 
 # ========================================
