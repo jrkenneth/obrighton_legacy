@@ -204,8 +204,8 @@
 						</div>
 
 						<div class="card">
-							<div class="card-body">
-								<form method="GET" class="row g-3 align-items-end">
+							<div class="card-body p-2">
+								<form method="GET" class="row g-2 align-items-end">
 									<div class="col-md-3">
 										<label class="form-label">Action</label>
 										<select name="action" class="form-control">
@@ -247,7 +247,7 @@
 									<div class="col-md-2 d-grid">
 										<button type="submit" class="btn btn-primary">Filter</button>
 									</div>
-									<div class="col-12">
+									<div class="col-12 mt-1">
 										<a href="audit-logs.php" class="btn btn-light btn-sm">Clear filters</a>
 									</div>
 								</form>
