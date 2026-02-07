@@ -20,6 +20,19 @@
 		$action_filter = '';
 	}
 
+	$table_filter = trim($_GET['table'] ?? '');
+	if ($table_filter !== '') {
+		// allow table names like: users, payment_history, access_mgt
+		if (!preg_match('/^[a-zA-Z0-9_]{1,100}$/', $table_filter)) {
+			$table_filter = '';
+		}
+	}
+
+	$keyword = trim($_GET['q'] ?? '');
+	if (strlen($keyword) > 100) {
+		$keyword = substr($keyword, 0, 100);
+	}
+
 	$date_from = trim($_GET['from'] ?? '');
 	$date_to = trim($_GET['to'] ?? '');
 	if ($date_from !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) {
@@ -48,6 +61,11 @@
 		$types .= 's';
 		$params[] = $action_filter;
 	}
+	if ($table_filter !== '') {
+		$where_sql .= " AND table_name = ? ";
+		$types .= 's';
+		$params[] = $table_filter;
+	}
 	if ($date_from !== '') {
 		$where_sql .= " AND timestamp >= ? ";
 		$types .= 's';
@@ -57,6 +75,28 @@
 		$where_sql .= " AND timestamp <= ? ";
 		$types .= 's';
 		$params[] = $date_to . ' 23:59:59';
+	}
+
+	if ($keyword !== '') {
+		$like = '%' . $keyword . '%';
+		if (ctype_digit($keyword)) {
+			$kw_int = intval($keyword);
+			$where_sql .= " AND (id = ? OR record_id = ? OR user_id = ? OR user_ip LIKE ? OR table_name LIKE ? OR action LIKE ?) ";
+			$types .= 'iiisss';
+			$params[] = $kw_int;
+			$params[] = $kw_int;
+			$params[] = $kw_int;
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+		} else {
+			$where_sql .= " AND (user_ip LIKE ? OR table_name LIKE ? OR action LIKE ? OR user_agent LIKE ?) ";
+			$types .= 'ssss';
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+		}
 	}
 
 	// Count total rows
@@ -128,6 +168,15 @@
 	}
 
 	include("_include/header.php");
+
+	// Build table list for filter dropdown
+	$table_names = [];
+	$tbl_result = $con->query("SELECT DISTINCT table_name FROM audit_logs ORDER BY table_name ASC");
+	while ($tbl_result && ($r = $tbl_result->fetch_assoc())) {
+		if (!empty($r['table_name'])) {
+			$table_names[] = $r['table_name'];
+		}
+	}
 ?>
 
 		<!--**********************************
@@ -167,12 +216,25 @@
 										</select>
 									</div>
 									<div class="col-md-3">
+										<label class="form-label">Table</label>
+										<select name="table" class="form-control">
+											<option value="" <?php echo $table_filter === '' ? 'selected' : ''; ?>>All</option>
+											<?php foreach ($table_names as $tname) { ?>
+												<option value="<?php echo _audit_h($tname); ?>" <?php echo $table_filter === $tname ? 'selected' : ''; ?>><?php echo _audit_h($tname); ?></option>
+											<?php } ?>
+										</select>
+									</div>
+									<div class="col-md-3">
 										<label class="form-label">From</label>
 										<input type="date" name="from" class="form-control" value="<?php echo _audit_h($date_from); ?>">
 									</div>
 									<div class="col-md-3">
 										<label class="form-label">To</label>
 										<input type="date" name="to" class="form-control" value="<?php echo _audit_h($date_to); ?>">
+									</div>
+									<div class="col-md-4">
+										<label class="form-label">Search</label>
+										<input type="text" name="q" class="form-control" value="<?php echo _audit_h($keyword); ?>" placeholder="Search id / record_id / user_id / IP / table">
 									</div>
 									<div class="col-md-2">
 										<label class="form-label">Per page</label>
@@ -182,7 +244,7 @@
 											<?php } ?>
 										</select>
 									</div>
-									<div class="col-md-1 d-grid">
+									<div class="col-md-2 d-grid">
 										<button type="submit" class="btn btn-primary">Filter</button>
 									</div>
 									<div class="col-12">
