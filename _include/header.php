@@ -270,7 +270,7 @@ if(isset($_GET['q'])){
 						</a>
 					</li>
 					-->
-					<li><a href="manage-agents.php" class="" aria-expanded="false" <?php echo $agent_hidden; ?>>
+					<li><a href="manage-agents.php" class="" aria-expanded="false" <?php echo $agent_hidden." ".$admin_hidden; ?>>
 						<div class="menu-icon">
 							<svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
 								<path fill-rule="evenodd" clip-rule="evenodd" d="M8.79222 13.9396C12.1738 13.9396 15.0641 14.452 15.0641 16.4989C15.0641 18.5458 12.1931 19.0729 8.79222 19.0729C5.40972 19.0729 2.52039 18.5651 2.52039 16.5172C2.52039 14.4694 5.39047 13.9396 8.79222 13.9396Z" stroke="#888888" stroke-linecap="round" stroke-linejoin="round"/>
@@ -365,6 +365,19 @@ if(isset($_GET['q'])){
 						</div>	
 							<span class="nav-text">Manage Users</span>
 						</a>
+					</li>
+					<li><a href="audit-logs.php" class="" aria-expanded="false" <?php echo $agent_hidden; ?> <?php echo $editor_hidden; ?>>
+						<div class="menu-icon">
+							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M9 5H7C5.89543 5 5 5.89543 5 7V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V7C19 5.89543 18.1046 5 17 5H15" stroke="#888888" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5" stroke="#888888" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M8 10H16" stroke="#888888" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M8 14H16" stroke="#888888" stroke-linecap="round" stroke-linejoin="round"/>
+								<path d="M8 18H13" stroke="#888888" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+						<span class="nav-text">Audit Logs</span>
+					</a>
 					</li>
 				</ul>
 				<hr>
