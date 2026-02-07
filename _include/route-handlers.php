@@ -434,7 +434,6 @@
         // PHASE 5: Use prepared statement for email check
         $stmt = $con->prepare("SELECT id FROM users WHERE email=?");
         if($stmt === false){
-            $message = "Error: Could not validate email. Please try again.";
             $cue_row_count = -1;
         } else {
             $stmt->bind_param("s", $email_address);
@@ -509,7 +508,7 @@
                             echo "<script>window.location='manage-users.php';</script>";
                         }
                     }else{
-                        $response = "error";
+                        $response = "success";
                         $message = "User account created successfully.";
                     
                         $_SESSION['response'] = $response;
@@ -2413,6 +2412,20 @@
         if($target == "delete-listing"){
             $target_id = $_GET['id'];
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $target_id_int = intval($target_id);
+            if ($target_id_int > 0) {
+                $stmt = $con->prepare("SELECT * FROM listings WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id_int);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                    $stmt->close();
+                }
+            }
+
             //delete listing from DB
             $delete_listing = "delete from listings where id='".$target_id."'";
             $run_dl = mysqli_query($con, $delete_listing);
@@ -2438,6 +2451,7 @@
             }
 
             if($run_dl){
+                AuditLog::log('DELETE', 'listings', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Listing data deleted.";
             
@@ -2464,6 +2478,20 @@
         if($target == "delete-media"){
             $target_id = $_GET['id'];
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $target_id_int = intval($target_id);
+            if ($target_id_int > 0) {
+                $stmt = $con->prepare("SELECT * FROM listing_media WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id_int);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                    $stmt->close();
+                }
+            }
+
             //other related delete actions
             $get_listing_media="SELECT * FROM listing_media where id='".$target_id."'";
             $glm_result=mysqli_query($con, $get_listing_media);
@@ -2485,6 +2513,7 @@
             $run_dlm = mysqli_query($con, $delete_lm);
 
             if($run_dlm){
+                AuditLog::log('DELETE', 'listing_media', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Listing media deleted.";
             
@@ -2512,11 +2541,26 @@
             $target_id = $_GET['id'];
             $tenant_id = $_GET['tenant-id'];
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $target_id_int = intval($target_id);
+            if ($target_id_int > 0) {
+                $stmt = $con->prepare("SELECT * FROM payment_history WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id_int);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                    $stmt->close();
+                }
+            }
+
             //delete payment from DB
             $delete_payment = "delete from payment_history where id='".$target_id."'";
             $run_dpmt = mysqli_query($con, $delete_payment);
 
             if($run_dpmt){
+                AuditLog::log('DELETE', 'payment_history', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Payment record deleted successfully.";
             
@@ -2585,10 +2629,25 @@
             $complaint_id = $_GET['complaint-id'];
             $source = $_GET['source'];
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $target_id_int = intval($target_id);
+            if ($target_id_int > 0) {
+                $stmt = $con->prepare("SELECT * FROM tickets WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id_int);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                    $stmt->close();
+                }
+            }
+
             $delete_ticket = "delete from tickets where id='".$target_id."'";
             $run_dtkt = mysqli_query($con, $delete_ticket);
 
             if($run_dtkt){
+                AuditLog::log('DELETE', 'tickets', $target_id_int, $before_data, null, $this_user);
                 $delete_ticket_convo = "delete from ticket_messages where complaint_id='".$complaint_id."'";
                 $run_dtkc = mysqli_query($con, $delete_ticket_convo);
 
@@ -2621,6 +2680,20 @@
             $source_param_1 = $_GET['user-id'];
             $source_param_2 = $_GET['user-type'];
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $target_id_int = intval($target_id);
+            if ($target_id_int > 0) {
+                $stmt = $con->prepare("SELECT * FROM ticket_type WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id_int);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                    $stmt->close();
+                }
+            }
+
             //delete ticket type from DB
             $delete_ticket_type = "delete from ticket_type where id='".$target_id."'";
             $run_dtt = mysqli_query($con, $delete_ticket_type);
@@ -2630,6 +2703,7 @@
             $run_utt = mysqli_query($con, $update_ticket_types);
 
             if($run_dtt){
+                AuditLog::log('DELETE', 'ticket_type', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Type deleted successfully.";
             
@@ -2675,6 +2749,17 @@
             // Log the deletion attempt
             error_log("DELETE_TENANT: User={$this_user} TenantID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $stmt = $con->prepare("SELECT * FROM tenants WHERE id=? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param('i', $target_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                $stmt->close();
+            }
+
             //delete tenant from DB
             $delete_tenant = "delete from tenants where id='".$target_id."'";
             $run_dt = mysqli_query($con, $delete_tenant);
@@ -2684,6 +2769,7 @@
             $run_rns = mysqli_query($con, $delete_rns);
 
             if($run_dt){
+                AuditLog::log('DELETE', 'tenants', $target_id, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Tenant data deleted.";
             
@@ -2729,6 +2815,17 @@
             // Log the deletion attempt
             error_log("DELETE_PROPERTY: User={$this_user} PropertyID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $stmt = $con->prepare("SELECT * FROM properties WHERE id=? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param('i', $target_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                $stmt->close();
+            }
+
             //delete property from DB
             $delete_property = "delete from properties where id='".$target_id."'";
             $run_dp = mysqli_query($con, $delete_property);
@@ -2769,6 +2866,7 @@
             $run_dls = mysqli_query($con, $delete_listings);
 
             if($run_dp){
+                AuditLog::log('DELETE', 'properties', $target_id, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Property data deleted.";
             
@@ -2813,6 +2911,17 @@
             
             // Log the deletion attempt
             error_log("DELETE_LANDLORD: User={$this_user} LandlordID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
+
+            // Audit snapshot before delete
+            $before_data = null;
+            $stmt = $con->prepare("SELECT * FROM landlords WHERE id=? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param('i', $target_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                $stmt->close();
+            }
 
             //delete landlord from DB
             $delete_landlord = "delete from landlords where id='".$target_id."'";
@@ -2861,6 +2970,7 @@
             }
 
             if($run_dl){
+                AuditLog::log('DELETE', 'landlords', $target_id, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Landlord data deleted.";
             
@@ -2906,6 +3016,17 @@
             // Log the deletion attempt
             error_log("DELETE_ARTISAN: User={$this_user} ArtisanID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $stmt = $con->prepare("SELECT * FROM artisans WHERE id=? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param('i', $target_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                $stmt->close();
+            }
+
             //delete artisan from DB
             $delete_artisan = "delete from artisans where id='".$target_id."'";
             $run_da = mysqli_query($con, $delete_artisan);
@@ -2918,6 +3039,7 @@
             $run_das = mysqli_query($con, $delete_artisan_services);
 
             if($run_da){
+                AuditLog::log('DELETE', 'artisans', $target_id, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Artisan data deleted successfully.";
             
@@ -2963,6 +3085,17 @@
             // Log the deletion attempt
             error_log("DELETE_SERVICE: User={$this_user} ServiceID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $stmt = $con->prepare("SELECT * FROM all_services WHERE id=? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param('i', $target_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                $stmt->close();
+            }
+
             //delete service type from DB
             $delete_service_type = "delete from all_services where id='".$target_id."'";
             $run_dst = mysqli_query($con, $delete_service_type);
@@ -2972,6 +3105,7 @@
             $run_dsa = mysqli_query($con, $delete_service_artisans);
 
             if($run_dst){
+                AuditLog::log('DELETE', 'all_services', $target_id, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Service deleted successfully.";
             
@@ -2999,11 +3133,27 @@
             $target_id = $_GET['id'];
             $target_artisan = $_GET['artisan'];
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $target_id_int = intval($target_id);
+            $target_artisan_int = intval($target_artisan);
+            if ($target_id_int > 0 && $target_artisan_int > 0) {
+                $stmt = $con->prepare("SELECT * FROM artisan_services WHERE service_id=? AND artisan_id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('ii', $target_id_int, $target_artisan_int);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                    $stmt->close();
+                }
+            }
+
             //remove artisan service from DB
             $remove_artisan_service = "delete from artisan_services where service_id='".$target_id."' and artisan_id='".$target_artisan."'";
             $run_ras = mysqli_query($con, $remove_artisan_service);
 
             if($run_ras){
+                AuditLog::log('DELETE', 'artisan_services', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Action completed successfully.";
             
@@ -3031,11 +3181,26 @@
             $target_id = $_GET['id'];
             $target_user = $_GET['user'];
 
+            // Audit snapshot before delete
+            $before_data = null;
+            $target_id_int = intval($target_id);
+            if ($target_id_int > 0) {
+                $stmt = $con->prepare("SELECT * FROM access_mgt WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id_int);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $before_data = $result ? ($result->fetch_assoc() ?: null) : null;
+                    $stmt->close();
+                }
+            }
+
             //remove access record from DB
             $remove_access = "delete from access_mgt where id='".$target_id."'";
             $run_ra = mysqli_query($con, $remove_access);
 
             if($run_ra){
+                AuditLog::log('DELETE', 'access_mgt', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Action completed successfully.";
             
@@ -3081,10 +3246,14 @@
             // Log the deletion attempt
             error_log("DELETE_USER: User={$this_user} TargetID={$target_id} Timestamp=" . date('Y-m-d H:i:s') . " IP={$_SERVER['REMOTE_ADDR']}");
 
+            // Audit snapshot before delete
+            $before_data = null;
+
             //delete users profile image
             $get_target_user="SELECT * FROM users where id='".$target_id."'";
             $gtu_result=mysqli_query($con, $get_target_user);
             while($row = $gtu_result->fetch_assoc()){
+                $before_data = $row;
                 $tu_profile_picture=$row['profile_picture'];
             }
             if(!empty($tu_profile_picture)){
@@ -3106,6 +3275,10 @@
 
 
             if($run_du){
+                if (is_array($before_data)) {
+                    unset($before_data['password'], $before_data['reset_token'], $before_data['token']);
+                }
+                AuditLog::log('DELETE', 'users', $target_id, $before_data, null, $this_user);
                 $response = "success";
                 $message = "User account deleted.";
             
@@ -3115,16 +3288,7 @@
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
 
-                if(($_GET['source'] ?? '') == "view-details"){
-                    $view_target = $_GET['view_target'] ?? 'users';
-                    $source = $_GET['source'] ?? '';
-                    $params = "?id=".$target_id."&view_target=".$view_target."&source=".$source;
-                }else{
-                    $params = "";
-                }
-
-                $safe_source = basename($_GET['source'] ?? '');
-                echo "<script>window.location='".$safe_source.".php".$params."';</script>";	
+                echo "<script>window.location='manage-users.php';</script>";	
             }else{
                 $response = "error";
                 $message = "Process failed. Try again later or contact tech support.";
