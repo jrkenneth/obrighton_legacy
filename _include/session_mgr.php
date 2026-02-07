@@ -16,6 +16,26 @@
     $db = new DatabaseHelper($con);
     AuditLog::initialize($db);
     CSRFProtection::initialize();
+
+    // Ensure required schema exists (backwards-compatible migration)
+    // Some environments may not yet have the `users.password_status` column.
+    try {
+        $col_check = $con->prepare("SHOW COLUMNS FROM users LIKE 'password_status'");
+        if ($col_check !== false) {
+            $col_check->execute();
+            $col_res = $col_check->get_result();
+            $has_col = ($col_res && $col_res->num_rows > 0);
+            $col_check->close();
+
+            if (!$has_col) {
+                // 1 = normal password, 0 = temporary password (must change)
+                $con->query("ALTER TABLE users ADD COLUMN password_status TINYINT(1) NOT NULL DEFAULT 1");
+                $con->query("UPDATE users SET password_status = 1 WHERE password_status IS NULL");
+            }
+        }
+    } catch (Throwable $e) {
+        // If migration fails, continue; downstream logic will fall back safely.
+    }
        
     if(!isset($_SESSION['this_user'])){
         echo "<script>window.location='login.php';</script>";	
@@ -29,7 +49,13 @@
         }
 
         // SECURITY: Use prepared statement to prevent SQL injection
-        $stmt = $con->prepare("SELECT first_name, last_name, profile_picture, email, phone_number, address, user_id, role_id, dashboard_access, last_login FROM users WHERE id=?");
+        try {
+            $stmt = $con->prepare("SELECT first_name, last_name, profile_picture, email, phone_number, address, user_id, role_id, dashboard_access, last_login, password_status FROM users WHERE id=?");
+        } catch (Throwable $e) {
+            // Fallback for legacy DBs if column is still missing for any reason.
+            $stmt = $con->prepare("SELECT first_name, last_name, profile_picture, email, phone_number, address, user_id, role_id, dashboard_access, last_login FROM users WHERE id=?");
+        }
+
         $stmt->bind_param("i", $this_user);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -46,6 +72,7 @@
             $tu_role_id = $row['role_id'];
             $tu_dashboard_access = $row['dashboard_access'];
             $tu_last_login = $row['last_login'];
+            $tu_password_status = $row['password_status'] ?? 1;
         } else {
             // User not found, force logout
             $stmt->close();
@@ -60,15 +87,26 @@
             echo "<script>window.location='login.php';</script>";
         }
 
+        // Force password change when using a temporary password
+        $current_page = basename($_SERVER['PHP_SELF'] ?? '');
+        if ((int)$tu_password_status === 0 && $current_page !== 'change-password.php') {
+            $_SESSION['force_password_change'] = true;
+            echo "<script>window.location='change-password.php';</script>";
+            exit;
+        }
+
         if($tu_role_id == "3"){
             $agent_hidden = "style='display: none;'";
             $editor_hidden = "";
+            $admin_hidden = "";
         }elseif($tu_role_id == "2"){
             $agent_hidden = "";
             $editor_hidden = "style='display: none;'";
+            $admin_hidden = "";
         }else{
             $agent_hidden = "";
             $editor_hidden = "";
+            $admin_hidden = "style='display: none;'";
         }
     
         if(empty($tu_profile_picture)){

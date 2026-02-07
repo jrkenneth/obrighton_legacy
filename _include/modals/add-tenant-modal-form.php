@@ -111,9 +111,10 @@
 										
 										if($tenants_count < $tp_na){
 											echo "<option value='".$_id."'>".$tp_id." (".$tenants_count." Tenant / ".$tp_na." Apartments)</option>";
-										}elseif($tenants_count >= $tp_na){
-											echo "<option value='".$_id."' disabled>".$tp_id." (".$tenants_count." Tenant / ".$tp_na." Apartments)</option>";
 										}
+										// elseif($tenants_count >= $tp_na){
+										// 	echo "<option value='".$_id."' disabled>".$tp_id." (".$tenants_count." Tenant / ".$tp_na." Apartments)</option>";
+										// }
 									}
 								?>
 							<?php

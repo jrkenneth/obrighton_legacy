@@ -43,6 +43,7 @@ if(isset($_GET['q'])){
 	
 	<!-- Style css -->
     <link href="css/style.css" rel="stylesheet">
+	<link href="css/obe-brand.css" rel="stylesheet">
 	
 	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
@@ -150,6 +151,7 @@ if(isset($_GET['q'])){
                 <nav class="navbar navbar-expand">
                     <div class="collapse navbar-collapse justify-content-between">
                         <div class="header-left">
+						<!--
 							<form action="search-results.php" method="GET" <?php echo $agent_hidden; ?>>
 								<div class="input-group search-area">
 									<input type="text" name="q" class="form-control" value="<?php echo $query; ?>" placeholder="Enter a search keyword..." required>
@@ -164,6 +166,7 @@ if(isset($_GET['q'])){
 									</span>
 								</div>
 							</form>	
+						-->
                         </div>
                         <ul class="navbar-nav header-right">
 							<li class="nav-item dropdown notification_dropdown">

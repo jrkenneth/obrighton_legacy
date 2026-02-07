@@ -72,7 +72,7 @@
             $_location_country=$row['location_country'];
             $_no_of_apartments=$row['no_of_apartments'];
             $_uploader_id=$row['uploader_id'];
-            $_owner_id=$row['owner_id'];
+			$_owner_id = $row['owner_id'] ?? null;
 
             $get_this_user = "select * from users where id='".$_uploader_id."'";
             $gtu_result = $con->query($get_this_user);
@@ -156,31 +156,35 @@
                 }
             }
 
-            $get_this_owner = "select * from users where id='".$_owner_id."'";
-            $gto_result = $con->query($get_this_owner);
-            $owner_count = mysqli_num_rows($gto_result);
+			if (!empty($_owner_id)) {
+				$get_this_owner = "select * from users where id='".$_owner_id."'";
+				$gto_result = $con->query($get_this_owner);
+				$owner_count = $gto_result ? mysqli_num_rows($gto_result) : 0;
 
-            if($owner_count == 1){
-                while($row = $gto_result->fetch_assoc())
-                {
-                    $to_user_id=$row['user_id'];
-                    $to_first_name=$row['first_name'];
-                    $to_last_name=$row['last_name'];
-                    $to_role_id=$row['role_id'];
+				if($owner_count == 1){
+					while($row = $gto_result->fetch_assoc())
+					{
+						$to_user_id=$row['user_id'];
+						$to_first_name=$row['first_name'];
+						$to_last_name=$row['last_name'];
+						$to_role_id=$row['role_id'];
 
-                    if($to_role_id == 1){
-                        $to_role = "ADMIN";
-                    }elseif($to_role_id == 2){
-                        $to_role = "EDITOR";
-                    }elseif($to_role_id == 3){
-                        $to_role = "AGENT";
-                    }
+						if($to_role_id == 1){
+							$to_role = "ADMIN";
+						}elseif($to_role_id == 2){
+							$to_role = "EDITOR";
+						}elseif($to_role_id == 3){
+							$to_role = "AGENT";
+						}
 
-                    $this_owner = $to_role.": ".$to_first_name." ".$to_last_name." (".$to_user_id.")";
-                }
-            }else{
-                $this_owner = "<span class='badge bg-danger'>N/A</span>";
-            }
+						$this_owner = $to_role.": ".$to_first_name." ".$to_last_name." (".$to_user_id.")";
+					}
+				}else{
+					$this_owner = "<span class='badge bg-danger'>N/A</span>";
+				}
+			} else {
+				$this_owner = "<span class='badge bg-danger'>N/A</span>";
+			}
 
             if(!empty($geo_location_url)){
                 $gl_url = $_geo_location_url;
@@ -305,7 +309,7 @@
 									$_notification_status=$row['notification_status'];
 									$_occupant_status=$row['occupant_status'];
 									$_uploader_id=$row['uploader_id'];
-									$_owner_id=$row['owner_id'];
+									$_owner_id = $row['owner_id'] ?? null;
 
 									$get_this_property = "select * from properties where id='".$_property_id."'";
 									$gtp_result = $con->query($get_this_property);
@@ -365,7 +369,7 @@
             $_notification_status=$row['notification_status'];
             $_occupant_status=$row['occupant_status'];
             $_uploader_id=$row['uploader_id'];
-            $_owner_id=$row['owner_id'];
+			$_owner_id = $row['owner_id'] ?? null;
 
 			$retrieve_last_payment = "select * from payment_history where tenant_id='".$target_id."' order by id desc limit 1,1";
             $rlp_result = $con->query($retrieve_last_payment);
@@ -423,31 +427,35 @@
                 $pmt_frequency="Yearly";
             }
 
-            $get_this_owner = "select * from users where id='".$_owner_id."'";
-            $gto_result = $con->query($get_this_owner);
-            $owner_count = mysqli_num_rows($gto_result);
+			if (!empty($_owner_id)) {
+				$get_this_owner = "select * from users where id='".$_owner_id."'";
+				$gto_result = $con->query($get_this_owner);
+				$owner_count = $gto_result ? mysqli_num_rows($gto_result) : 0;
 
-            if($owner_count == 1){
-                while($row = $gto_result->fetch_assoc())
-                {
-                    $to_user_id=$row['user_id'];
-                    $to_first_name=$row['first_name'];
-                    $to_last_name=$row['last_name'];
-                    $to_role_id=$row['role_id'];
+				if($owner_count == 1){
+					while($row = $gto_result->fetch_assoc())
+					{
+						$to_user_id=$row['user_id'];
+						$to_first_name=$row['first_name'];
+						$to_last_name=$row['last_name'];
+						$to_role_id=$row['role_id'];
 
-                    if($to_role_id == 1){
-                        $to_role = "ADMIN";
-                    }elseif($to_role_id == 2){
-                        $to_role = "EDITOR";
-                    }elseif($to_role_id == 3){
-                        $to_role = "AGENT";
-                    }
+						if($to_role_id == 1){
+							$to_role = "ADMIN";
+						}elseif($to_role_id == 2){
+							$to_role = "EDITOR";
+						}elseif($to_role_id == 3){
+							$to_role = "AGENT";
+						}
 
-                    $this_owner = $to_role.": ".$to_first_name." ".$to_last_name." (".$to_user_id.")";
-                }
-            }else{
-                $this_owner = "<span class='badge bg-danger'>N/A</span>";
-            }
+						$this_owner = $to_role.": ".$to_first_name." ".$to_last_name." (".$to_user_id.")";
+					}
+				}else{
+					$this_owner = "<span class='badge bg-danger'>N/A</span>";
+				}
+			} else {
+				$this_owner = "<span class='badge bg-danger'>N/A</span>";
+			}
 
             $get_this_property = "select * from properties where id='".$_property_id."'";
             $gtp_result = $con->query($get_this_property);

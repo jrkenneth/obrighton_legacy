@@ -1,0 +1,404 @@
+/* O.BRIGHTON brand overrides (shared across admin/landlord/tenant) */
+
+:root {
+  /* Palette inspired by the O.BRIGHTON logo */
+  --obe-primary: #0B3F67;
+  --obe-primary-hover: #0A3557;
+  --obe-primary-dark: #06263D;
+  --obe-primary-rgb: 11, 63, 103;
+  --obe-gray: #B1B5BB;
+
+  /* Admin dashboard theme variables (DexignZone-style) */
+  --primary: var(--obe-primary);
+  --primary-hover: var(--obe-primary-hover);
+  --primary-dark: var(--obe-primary-dark);
+
+  --rgba-primary-1: rgba(var(--obe-primary-rgb), 0.1);
+  --rgba-primary-2: rgba(var(--obe-primary-rgb), 0.2);
+  --rgba-primary-3: rgba(var(--obe-primary-rgb), 0.3);
+  --rgba-primary-4: rgba(var(--obe-primary-rgb), 0.4);
+  --rgba-primary-5: rgba(var(--obe-primary-rgb), 0.5);
+  --rgba-primary-6: rgba(var(--obe-primary-rgb), 0.6);
+  --rgba-primary-7: rgba(var(--obe-primary-rgb), 0.7);
+  --rgba-primary-8: rgba(var(--obe-primary-rgb), 0.8);
+  --rgba-primary-9: rgba(var(--obe-primary-rgb), 0.9);
+
+  /* Bootstrap 5 variables used inside css/style.css */
+  --bs-primary: var(--obe-primary);
+  --bs-primary-rgb: var(--obe-primary-rgb);
+  --bs-primary-text-emphasis: #06263D;
+  --bs-primary-bg-subtle: #D9E8F3;
+  --bs-primary-border-subtle: #A9CBE0;
+}
+
+/* ==============================
+   Admin dashboard: sidebar + top header
+   (Scope to admin only: body has data-layout)
+   ============================== */
+
+body[data-layout] {
+  --nav-headbg: var(--obe-primary-dark);
+  --sidebar-bg: var(--obe-primary-dark);
+  --headerbg: var(--obe-primary-dark);
+}
+
+body[data-layout] .nav-header,
+body[data-layout] .deznav,
+body[data-layout] .header {
+  background-color: var(--obe-primary-dark);
+}
+
+body[data-layout] .deznav {
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+body[data-layout] .deznav .metismenu > li > a,
+body[data-layout] .deznav .metismenu a {
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+
+body[data-layout] .deznav .metismenu > li > a i {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+body[data-layout] .deznav .metismenu > li > a g [fill] {
+  fill: rgba(255, 255, 255, 0.72) !important;
+}
+
+/* Keep SVG icons readable on dark sidebar (theme sets active stroke/fill to --primary) */
+body[data-layout] .deznav .metismenu > li > a .menu-icon svg path {
+  stroke: rgba(255, 255, 255, 0.72) !important;
+}
+
+body[data-layout] .deznav .metismenu > li:hover > a .menu-icon svg path,
+body[data-layout] .deznav .metismenu > li:focus > a .menu-icon svg path,
+body[data-layout] .deznav .metismenu > li.mm-active > a .menu-icon svg path {
+  stroke: #ffffff !important;
+}
+
+body[data-layout] .deznav .metismenu > li:hover > a g [fill],
+body[data-layout] .deznav .metismenu > li:focus > a g [fill],
+body[data-layout] .deznav .metismenu > li.mm-active > a g [fill] {
+  fill: #ffffff !important;
+}
+
+body[data-layout] .deznav .metismenu > li:hover > a,
+body[data-layout] .deznav .metismenu > li:focus > a {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+body[data-layout] .deznav .metismenu > li.mm-active > a {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+body[data-layout] .deznav .metismenu ul a:hover,
+body[data-layout] .deznav .metismenu ul a:focus,
+body[data-layout] .deznav .metismenu ul a.mm-active {
+  color: #ffffff !important;
+}
+
+body[data-layout] .deznav .metismenu .menu-title {
+  color: rgba(255, 255, 255, 0.60) !important;
+}
+
+body[data-layout] .header-right .nav-item .nav-link {
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+
+body[data-layout] .header-right .notification_dropdown .nav-link svg path,
+body[data-layout] .header-right .notification_dropdown .nav-link svg circle {
+  stroke: rgba(255, 255, 255, 0.78) !important;
+}
+
+body[data-layout] .header-right .notification_dropdown .nav-link:hover {
+  background: rgba(255, 255, 255, 0.10) !important;
+}
+
+/* Portal dashboard theme (landlord/tenant) uses coral accent (#EB6753 / #EE4C34). Override key theme classes. */
+/* Some templates use text-thm1 even though the theme defines text-thm/text-thm2 */
+.text-thm,
+.text-thm1,
+.text-thm2 {
+  color: var(--obe-primary) !important;
+}
+
+.bgc-thm,
+.bgc-thm1,
+.bgc-thm2 {
+  background-color: var(--obe-primary) !important;
+}
+
+.bgc-thm-light {
+  background-color: rgba(var(--obe-primary-rgb), 0.05) !important;
+}
+
+.btn-thm {
+  background-color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+}
+
+/* Alias for any custom markup using btn-thm1 */
+.btn-thm1 {
+  background-color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+  color: #ffffff !important;
+}
+
+.btn-thm2 {
+  background-color: rgba(var(--obe-primary-rgb), 0.1) !important;
+  color: var(--obe-primary) !important;
+}
+
+.btn-thm3,
+.btn-thm-border {
+  border-color: var(--obe-primary) !important;
+}
+
+.btn-thm3 {
+  color: var(--obe-primary) !important;
+}
+
+.btn-dark:hover {
+  background-color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+}
+
+/* Theme uses coral border on hover for some secondary buttons */
+body:not([data-layout]) .btn-white:hover,
+body:not([data-layout]) .btn-white2:hover,
+body:not([data-layout]) .btn-light-gray:hover {
+  border-color: var(--obe-primary) !important;
+}
+
+.ud-btn:before,
+.btn-gray:before,
+.btn-dark:before,
+.btn-thm:before,
+.btn-thm2:before,
+.btn-thm3:before,
+.btn-thm-border:before,
+.btn-white:before,
+.btn-light-gray:before,
+.btn-transparent:before,
+.btn-transparent2:before {
+  background-color: var(--obe-primary-hover) !important;
+}
+
+/* Dashboard navigation hover accent */
+.dashboard_navigationbar .dropdown a:hover {
+  color: var(--obe-primary) !important;
+}
+
+/* General portal link hover should lean navy (but do NOT override button text colors) */
+body:not([data-layout]) a:not(.btn):not(.ud-btn):hover,
+body:not([data-layout]) a:not(.btn):not(.ud-btn):focus {
+  color: var(--obe-primary) !important;
+}
+
+/* ==============================
+   Landlord/Tenant portals: Bootstrap contextual colors
+   Many portal pages use btn-success/bg-success/text-success for primary actions.
+   Keep danger/warning as-is, but align primary/success/info to brand navy.
+   ============================== */
+
+body:not([data-layout]) {
+  --bs-success: var(--obe-primary);
+  --bs-success-rgb: var(--obe-primary-rgb);
+  --bs-info: var(--obe-primary);
+  --bs-info-rgb: var(--obe-primary-rgb);
+}
+
+body:not([data-layout]) .text-primary,
+body:not([data-layout]) .text-success,
+body:not([data-layout]) .text-info {
+  color: var(--obe-primary) !important;
+}
+
+body:not([data-layout]) .bg-primary,
+body:not([data-layout]) .bg-success,
+body:not([data-layout]) .bg-info {
+  background-color: var(--obe-primary) !important;
+}
+
+body:not([data-layout]) .badge.bg-primary,
+body:not([data-layout]) .badge.bg-success,
+body:not([data-layout]) .badge.bg-info {
+  background-color: var(--obe-primary) !important;
+}
+
+body:not([data-layout]) .btn-primary,
+body:not([data-layout]) .btn-success,
+body:not([data-layout]) .btn-info {
+  background-color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+  color: #ffffff !important;
+}
+
+body:not([data-layout]) .btn-primary:hover,
+body:not([data-layout]) .btn-success:hover,
+body:not([data-layout]) .btn-info:hover,
+body:not([data-layout]) .btn-primary:focus,
+body:not([data-layout]) .btn-success:focus,
+body:not([data-layout]) .btn-info:focus {
+  background-color: var(--obe-primary-hover) !important;
+  border-color: var(--obe-primary-hover) !important;
+  color: #ffffff !important;
+}
+
+/* Common "View Details" style is often secondary/grey; align to brand */
+body:not([data-layout]) .text-secondary {
+  color: var(--obe-primary) !important;
+}
+
+body:not([data-layout]) .bg-secondary,
+body:not([data-layout]) .badge.bg-secondary,
+body:not([data-layout]) .badge.text-bg-secondary {
+  background-color: rgba(var(--obe-primary-rgb), 0.12) !important;
+  color: var(--obe-primary) !important;
+}
+
+body:not([data-layout]) .btn-secondary {
+  background-color: rgba(var(--obe-primary-rgb), 0.12) !important;
+  border-color: rgba(var(--obe-primary-rgb), 0.18) !important;
+  color: var(--obe-primary) !important;
+}
+
+body:not([data-layout]) .btn-secondary:hover,
+body:not([data-layout]) .btn-secondary:focus {
+  background-color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+  color: #ffffff !important;
+}
+
+body:not([data-layout]) .btn-outline-secondary {
+  color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+}
+
+body:not([data-layout]) .btn-outline-secondary:hover,
+body:not([data-layout]) .btn-outline-secondary:focus {
+  background-color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+  color: #ffffff !important;
+}
+
+body:not([data-layout]) .btn-outline-primary,
+body:not([data-layout]) .btn-outline-success,
+body:not([data-layout]) .btn-outline-info {
+  color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+}
+
+body:not([data-layout]) .btn-outline-primary:hover,
+body:not([data-layout]) .btn-outline-success:hover,
+body:not([data-layout]) .btn-outline-info:hover {
+  background-color: var(--obe-primary) !important;
+  border-color: var(--obe-primary) !important;
+  color: #ffffff !important;
+}
+
+body:not([data-layout]) .btn:focus,
+body:not([data-layout]) .btn:focus-visible {
+  box-shadow: 0 0 0 0.25rem rgba(var(--obe-primary-rgb), 0.25) !important;
+}
+
+/* ==============================
+   Landlord/Tenant portals: ticket / conversation view (manage-request)
+   This page uses .table-container rows with .bg-dark for the "Me" bubble and
+   an inline black background on the reply form. Tune to brand + contrast.
+   ============================== */
+
+body:not([data-layout]) .table-container .bg-dark {
+  background-color: var(--obe-primary-dark) !important;
+}
+
+body:not([data-layout]) .table-container .bg-dark hr {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+body:not([data-layout]) .table-container .bg-dark small {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+/* Attachments inside dark bubbles: keep them high-contrast */
+body:not([data-layout]) .table-container .bg-dark a.badge,
+body:not([data-layout]) .table-container .bg-dark .badge {
+  background-color: rgba(255, 255, 255, 0.14) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+/* Reply form: override inline black background with brand navy */
+body:not([data-layout]) .active-projects + .basic-form {
+  background-color: var(--obe-primary-dark) !important;
+  border-radius: 8px;
+}
+
+body:not([data-layout]) .active-projects + .basic-form .form-label {
+  color: rgba(255, 255, 255, 0.80) !important;
+}
+
+body:not([data-layout]) .active-projects + .basic-form .form-control {
+  background-color: rgba(255, 255, 255, 0.98) !important;
+  color: #0f172a !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+body:not([data-layout]) .active-projects + .basic-form .form-control:focus {
+  border-color: rgba(var(--obe-primary-rgb), 0.55) !important;
+  box-shadow: 0 0 0 0.25rem rgba(var(--obe-primary-rgb), 0.25) !important;
+}
+
+/* A few common accent spots */
+.app-widget .app-info:hover,
+.app-widget .app-info.light-style:hover {
+  background-color: var(--obe-primary) !important;
+}
+
+.link-style1.at-home9 a:hover {
+  color: var(--obe-primary) !important;
+}
+
+/* ==============================
+   Landlord/Tenant portals: sidebar only
+   (Scope away from admin by excluding body[data-layout])
+   ============================== */
+
+body:not([data-layout]) .dashboard__sidebar,
+body:not([data-layout]) .dashboard_sidebar_list {
+  background-color: var(--obe-primary-dark) !important;
+}
+
+body:not([data-layout]) .dashboard_sidebar_list .sidebar_list_item a,
+body:not([data-layout]) .dashboard_sidebar_list a {
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+body:not([data-layout]) .dashboard_sidebar_list .sidebar_list_item a i,
+body:not([data-layout]) .dashboard_sidebar_list a i {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+body:not([data-layout]) .dashboard_sidebar_list .sidebar_list_item a:hover,
+body:not([data-layout]) .dashboard_sidebar_list a:hover {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+body:not([data-layout]) .dashboard_sidebar_list .sidebar_list_item a.-is-active,
+body:not([data-layout]) .dashboard_sidebar_list a.-is-active,
+body:not([data-layout]) .dashboard_sidebar_list .sidebar_list_item.-is-active > a {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+/* Portal header: navy bottom shadow (keep header background white) */
+body:not([data-layout]) .dashboard_header {
+  box-shadow: 0 10px 18px -16px rgba(var(--obe-primary-rgb), 0.75) !important;
+}
+
+body:not([data-layout]) .mobilie_header_nav .header {
+  box-shadow: 0 10px 18px -16px rgba(var(--obe-primary-rgb), 0.75) !important;
+}

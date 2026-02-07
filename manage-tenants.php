@@ -32,7 +32,72 @@
 	if(!isset($_GET['target'])){
 		$_SESSION['redirect_url'] = basename($_SERVER['REQUEST_URI']);
 	}
+
+	$show_tenant_temp_password_modal = false;
+	$tenant_temp_password = '';
+	$tenant_temp_tenant_id = '';
+	$tenant_temp_email = '';
+	$tenant_temp_name = '';
+	$tenant_temp_mode = '';
+	if(isset($_SESSION['new_tenant_temp_password'])){
+		$show_tenant_temp_password_modal = true;
+		$tenant_temp_mode = 'new';
+		$tenant_temp_password = $_SESSION['new_tenant_temp_password'];
+		$tenant_temp_tenant_id = $_SESSION['new_tenant_temp_tenant_id'] ?? '';
+		$tenant_temp_email = $_SESSION['new_tenant_temp_email'] ?? '';
+		$tenant_temp_name = $_SESSION['new_tenant_temp_name'] ?? '';
+		unset($_SESSION['new_tenant_temp_password'], $_SESSION['new_tenant_temp_tenant_id'], $_SESSION['new_tenant_temp_email'], $_SESSION['new_tenant_temp_name']);
+	} elseif(isset($_SESSION['reset_tenant_temp_password'])){
+		$show_tenant_temp_password_modal = true;
+		$tenant_temp_mode = 'reset';
+		$tenant_temp_password = $_SESSION['reset_tenant_temp_password'];
+		$tenant_temp_tenant_id = $_SESSION['reset_tenant_temp_tenant_id'] ?? '';
+		$tenant_temp_email = $_SESSION['reset_tenant_temp_email'] ?? '';
+		$tenant_temp_name = $_SESSION['reset_tenant_temp_name'] ?? '';
+		unset($_SESSION['reset_tenant_temp_password'], $_SESSION['reset_tenant_temp_tenant_id'], $_SESSION['reset_tenant_temp_email'], $_SESSION['reset_tenant_temp_name']);
+	}
 ?>
+
+<?php if($show_tenant_temp_password_modal){ ?>
+	<div class="modal fade" id="tempTenantPasswordModal" tabindex="-1" aria-labelledby="tempTenantPasswordModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="tempTenantPasswordModalLabel">Temporary Password</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					<p class="mb-2">
+						<?php if($tenant_temp_mode === 'new'){ ?>
+							Share this temporary password with the new tenant. They will be forced to change it on first login.
+						<?php } else { ?>
+							Share this temporary password with the tenant. They will be forced to change it on their next login.
+						<?php } ?>
+					</p>
+					<div class="mb-2"><strong>Tenant ID:</strong> <?php echo htmlspecialchars($tenant_temp_tenant_id, ENT_QUOTES, 'UTF-8'); ?></div>
+					<div class="mb-2"><strong>Name:</strong> <?php echo htmlspecialchars($tenant_temp_name, ENT_QUOTES, 'UTF-8'); ?></div>
+					<div class="mb-3"><strong>Email:</strong> <?php echo htmlspecialchars($tenant_temp_email, ENT_QUOTES, 'UTF-8'); ?></div>
+					<div class="input-group">
+						<input type="text" class="form-control" id="tempTenantPasswordValue" value="<?php echo htmlspecialchars($tenant_temp_password, ENT_QUOTES, 'UTF-8'); ?>" readonly>
+						<button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('tempTenantPasswordValue').value)">Copy</button>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script>
+		document.addEventListener('DOMContentLoaded', function(){
+			var modalEl = document.getElementById('tempTenantPasswordModal');
+			if(modalEl){
+				var modal = new bootstrap.Modal(modalEl);
+				modal.show();
+			}
+		});
+	</script>
+<?php } ?>
 		
 		<!--**********************************
             Content body start
@@ -130,6 +195,11 @@
 															$manage_request_link = "";
 														}
 
+														$reset_tenant_menu_item = '';
+														if (Authorization::isAdmin()) {
+															$reset_tenant_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_tenant_".$_id."' class='dropdown-item'>Reset Password</a>";
+														}
+
 														echo "
 															<tr>
 																<td>
@@ -148,6 +218,7 @@
 																			<a class='dropdown-item' href='view-details.php?id=".$_id."&view_target=tenants&source=manage-tenants'>View Details</a>
 																			<!--<a class='dropdown-item' ".$agent_hidden." href='payment-history.php?tenant-id=".$_id."'>Manage Payment History</a>-->
 																			<a class='dropdown-item' ".$agent_hidden." href='?target=update-tenant&id=".$_id."'>Edit Tenant</a>
+																			".$reset_tenant_menu_item."
 																			<a type='button' ".$agent_hidden." ".$editor_hidden." data-bs-toggle='modal' data-bs-target='#exampleModalCenter_".$_id."' class='dropdown-item'>Delete Tenant</a>
 																		</div>
 																	</div>
@@ -163,6 +234,14 @@
 														$delete_page = "manage-tenants";
 				
 														include("_include/modals/delete-modal.php");
+
+													$reset_target_id = $_id;
+													$reset_target = "Tenant: ".$_first_name." ".$_last_name." (".$_tenant_id.")";
+													$reset_message = "This will reset this tenant's password and force them to change it on their next login. Do you want to proceed?";
+													$reset_page = "manage-tenants";
+													if (Authorization::isAdmin()) {
+														include("_include/modals/reset-tenant-password-modal.php");
+													}
 													}
 												}
 											}elseif($tu_role_id == "3"){
@@ -223,6 +302,11 @@
 															$manage_request_link = "";
 														}
 
+														$reset_tenant_menu_item = '';
+														if (Authorization::isAdmin()) {
+															$reset_tenant_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_tenant_".$_id."' class='dropdown-item'>Reset Password</a>";
+														}
+
 														echo "
 															<tr>
 																<td>
@@ -241,6 +325,7 @@
 																			<a class='dropdown-item' href='view-details.php?id=".$_id."&view_target=tenants&source=manage-tenants'>View Details</a>
 																			<!--<a class='dropdown-item' ".$agent_hidden." href='payment-history.php?tenant-id=".$_id."'>Manage Payment History</a>-->
 																			<a class='dropdown-item' ".$agent_hidden." href='?target=update-tenant&id=".$_id."'>Edit Tenant</a>
+																			".$reset_tenant_menu_item."
 																			<a type='button' ".$agent_hidden." ".$editor_hidden." data-bs-toggle='modal' data-bs-target='#exampleModalCenter_".$_id."' class='dropdown-item'>Delete Tenant</a>
 																		</div>
 																	</div>
@@ -256,6 +341,14 @@
 														$delete_page = "manage-tenants";
 				
 														include("_include/modals/delete-modal.php");
+
+													$reset_target_id = $_id;
+													$reset_target = "Tenant: ".$_first_name." ".$_last_name." (".$_tenant_id.")";
+													$reset_message = "This will reset this tenant's password and force them to change it on their next login. Do you want to proceed?";
+													$reset_page = "manage-tenants";
+													if (Authorization::isAdmin()) {
+														include("_include/modals/reset-tenant-password-modal.php");
+													}
 													}
 												}
 											}else{
@@ -310,6 +403,11 @@
 														$manage_request_link = "";
 													}
 
+													$reset_tenant_menu_item = '';
+													if (Authorization::isAdmin()) {
+														$reset_tenant_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_tenant_".$_id."' class='dropdown-item'>Reset Password</a>";
+													}
+
 													echo "
 														<tr>
 															<td>
@@ -328,6 +426,7 @@
 																		<a class='dropdown-item' href='view-details.php?id=".$_id."&view_target=tenants&source=manage-tenants'>View Details</a>
 																		<!--<a class='dropdown-item' ".$agent_hidden." href='payment-history.php?tenant-id=".$_id."'>Manage Payment History</a>-->
 																		<a class='dropdown-item' ".$agent_hidden." href='?target=update-tenant&id=".$_id."'>Edit Tenant</a>
+																		".$reset_tenant_menu_item."
 																		<a type='button' ".$agent_hidden." ".$editor_hidden." data-bs-toggle='modal' data-bs-target='#exampleModalCenter_".$_id."' class='dropdown-item'>Delete Tenant</a>
 																	</div>
 																</div>
@@ -343,6 +442,14 @@
 													$delete_page = "manage-tenants";
 			
 													include("_include/modals/delete-modal.php");
+
+													$reset_target_id = $_id;
+													$reset_target = "Tenant: ".$_first_name." ".$_last_name." (".$_tenant_id.")";
+													$reset_message = "This will reset this tenant's password and force them to change it on their next login. Do you want to proceed?";
+													$reset_page = "manage-tenants";
+													if (Authorization::isAdmin()) {
+														include("_include/modals/reset-tenant-password-modal.php");
+													}
 												}
 											}	
 										?>

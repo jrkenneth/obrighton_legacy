@@ -113,6 +113,63 @@
         echo "<script>window.location='login.php';</script>";
     }
 
+    // Backwards-compatible migration: ensure `users.password_status` exists
+    // (used for temporary-password onboarding and forced change on first login)
+    try {
+        $col_check = $con->prepare("SHOW COLUMNS FROM users LIKE 'password_status'");
+        if ($col_check !== false) {
+            $col_check->execute();
+            $col_res = $col_check->get_result();
+            $has_col = ($col_res && $col_res->num_rows > 0);
+            $col_check->close();
+
+            if (!$has_col) {
+                $con->query("ALTER TABLE users ADD COLUMN password_status TINYINT(1) NOT NULL DEFAULT 1");
+                $con->query("UPDATE users SET password_status = 1 WHERE password_status IS NULL");
+            }
+        }
+    } catch (Throwable $e) {
+        // Ignore; handlers will fall back where possible.
+    }
+
+    // Backwards-compatible migration: ensure `landlords.password_status` exists
+    // 0 = no password set, 1 = admin-set/default (temporary; must change), 2 = updated by landlord
+    try {
+        $col_check = $con->prepare("SHOW COLUMNS FROM landlords LIKE 'password_status'");
+        if ($col_check !== false) {
+            $col_check->execute();
+            $col_res = $col_check->get_result();
+            $has_col = ($col_res && $col_res->num_rows > 0);
+            $col_check->close();
+
+            if (!$has_col) {
+                $con->query("ALTER TABLE landlords ADD COLUMN password_status TINYINT(1) NOT NULL DEFAULT 0");
+                $con->query("UPDATE landlords SET password_status = 0 WHERE password_status IS NULL");
+            }
+        }
+    } catch (Throwable $e) {
+        // Ignore
+    }
+
+    // Backwards-compatible migration: ensure `tenants.password_status` exists
+    // 0 = no password set, 1 = admin-set/default (temporary; must change), 2 = updated by tenant
+    try {
+        $col_check = $con->prepare("SHOW COLUMNS FROM tenants LIKE 'password_status'");
+        if ($col_check !== false) {
+            $col_check->execute();
+            $col_res = $col_check->get_result();
+            $has_col = ($col_res && $col_res->num_rows > 0);
+            $col_check->close();
+
+            if (!$has_col) {
+                $con->query("ALTER TABLE tenants ADD COLUMN password_status TINYINT(1) NOT NULL DEFAULT 0");
+                $con->query("UPDATE tenants SET password_status = 0 WHERE password_status IS NULL");
+            }
+        }
+    } catch (Throwable $e) {
+        // Ignore
+    }
+
     //login - PHASE 3: Secure Login Handler
     if( isset($_POST['login']) ){
         // SECURITY: Validate CSRF token first
@@ -131,7 +188,7 @@
                 $message = "<span class='text-danger'>Login attempt failed. Invalid password format.</span>";
             } else {
                 // SECURITY: Use prepared statement to prevent SQL injection
-                $stmt = $con->prepare("SELECT id, password, dashboard_access, first_name, role_id FROM users WHERE email=? OR user_id=?");
+                $stmt = $con->prepare("SELECT id, password, dashboard_access, first_name, role_id, password_status FROM users WHERE email=? OR user_id=?");
                 if($stmt === false){
                     AuditLog::log('LOGIN_QUERY_FAILED', 'users', 0, null, array('reason' => 'Prepare failed: ' . $con->error, 'user' => $user));
                     $message = "<span class='text-danger'>Login system error. Please try again later.</span>";
@@ -146,6 +203,7 @@
                         $this_password = $row['password'];
                         $dashboard_access = $row['dashboard_access'];
                         $first_name = $row['first_name'];
+                        $password_status = isset($row['password_status']) ? intval($row['password_status']) : 1;
                         
                         if($dashboard_access == "1"){
                             if(password_verify($password, $this_password)){
@@ -160,7 +218,18 @@
                                 
                                 // SECURITY: Log successful login
                                 AuditLog::log('LOGIN_SUCCESS', 'users', $id, null, array('user' => $user, 'timestamp' => $date_time), $id);
-                                
+
+                                // Force password change if user is logging in with a temporary password
+                                if ($password_status === 0) {
+                                    $_SESSION['force_password_change'] = true;
+                                    $_SESSION['response'] = 'warning';
+                                    $_SESSION['message'] = 'For security reasons, you must change your temporary password before continuing.';
+                                    $_SESSION['expire'] = time() + 10;
+                                    echo "<meta http-equiv='refresh' content='0; url=change-password.php' >";
+                                    exit;
+                                }
+
+                                unset($_SESSION['force_password_change']);
                                 $message = "<span class='text-success'>Login attempt successful, Welcome ".$first_name."!</span>";
                                 echo "<meta http-equiv='refresh' content='3; url=index.php' >";
                             } else {
@@ -399,31 +468,52 @@
         }
     }
         
+    function generateTempPassword($length = 10) {
+        $length = intval($length);
+        if ($length < 8) {
+            $length = 8;
+        }
+        if ($length > 32) {
+            $length = 32;
+        }
+
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+        $alphabet_len = strlen($alphabet);
+        $bytes = random_bytes($length);
+        $password = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $password .= $alphabet[ord($bytes[$i]) % $alphabet_len];
+        }
+
+        return $password;
+    }
+
     //add new user
     if(isset($_POST['submit_new_user'])){
         $picture_label = "<span class='text-danger'>Re-select Profile Picture</span> (ignore if nothing was selected previously)";
 
         $profile_picture = $_FILES['profile_picture']['name'];
-        $first_name = $_POST['first_name'];
-        $last_name = $_POST['last_name'];
-        $email_address =$_POST['email_address'];
-        $contact_number =$_POST['contact_number'];	
-        $location =$_POST['location'];							
-        $role =$_POST['role'];
+        $first_name = InputValidator::sanitizeText($_POST['first_name'] ?? '', 100);
+        $last_name = InputValidator::sanitizeText($_POST['last_name'] ?? '', 100);
+        $email_address = InputValidator::sanitizeText($_POST['email_address'] ?? '', 150);
+        $contact_number = InputValidator::sanitizeText($_POST['contact_number'] ?? '', 30);	
+        $location = InputValidator::sanitizeText($_POST['location'] ?? '', 255);						
+        $role = intval($_POST['role'] ?? 0);
 
-        if($role == "1"){
+        if($role == 1){
             $code = "OAD";
 
             $ad_option = "selected";
             $ed_option = "";
             $ag_option = "";
-        }elseif($role == "2"){
+        }elseif($role == 2){
             $code = "OBE";
 
             $ad_option = "";
             $ed_option = "selected";
             $ag_option = "";
-        }elseif($role == "3"){
+        }elseif($role == 3){
             $code = "OBA";
 
             $ad_option = "";
@@ -445,12 +535,18 @@
 
         if($cue_row_count < 1){
 
+            // Generate a temporary password (admin shares this with the user)
+            $temp_password_plain = generateTempPassword(10);
+            $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
+            $dashboard_access = 1;
+            $password_status = 0; // must change password on first login
+
             // PHASE 5: Use prepared statement for INSERT
-            $stmt = $con->prepare("INSERT INTO users(first_name, last_name, profile_picture, email, phone_number, address, role_id) VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?)");
+            $stmt = $con->prepare("INSERT INTO users(first_name, last_name, profile_picture, email, phone_number, address, role_id, password, dashboard_access, password_status) VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?)");
             if($stmt === false){
                 $message = "Error: Could not create user. Please try again.";
             } else {
-                $stmt->bind_param("ssssssi", $first_name, $last_name, $profile_picture, $email_address, $contact_number, $location, $role);
+                $stmt->bind_param("ssssssisii", $first_name, $last_name, $profile_picture, $email_address, $contact_number, $location, $role, $temp_password_hash, $dashboard_access, $password_status);
                 if($stmt->execute()){
                     $inserted_id = $stmt->insert_id;
                     $stmt->close();
@@ -472,53 +568,23 @@
                         move_uploaded_file($ifile_tmp, "file_uploads/users/".$profile_picture);
                     }
 
-                    if ($host != "localhost:8888" && !empty($email_address)) {
-                        //send user a welcome email with link to set password
-                        
-                        $sender_mail = "no-reply@obrightonempire.com";
-                        $sender_name = "O.BRIGHTON EMPIRE LIMITED";
-                        $receiver_mail = $email_address;
-                        $receiver_name = $first_name." ".$last_name;
+                    // Store temp password for admin modal
+                    $_SESSION['new_user_temp_password'] = $temp_password_plain;
+                    $_SESSION['new_user_temp_user_id'] = $user_id;
+                    $_SESSION['new_user_temp_email'] = $email_address;
+                    $_SESSION['new_user_temp_name'] = $first_name . ' ' . $last_name;
 
-                        include("emails/new-user-email.php");
+                    $response = "success";
+                    $message = "User account created successfully. Copy the temporary password and share it with the user.";
 
-                        $email_sent = sendMail($sender_mail, $sender_name, $receiver_mail, $receiver_name, $this_subject, $this_body);
- 
-                        if ($email_sent === 1) {
-                            $response = "success";
-                            $message = "User account created. Activation email has been sent successfully to <u>".$receiver_mail."</u>.";
-                        
-                            $_SESSION['response'] = $response;
-                            $_SESSION['message'] = $message;
-                        
-                            $res_sess_duration = 5;
-                            $_SESSION['expire'] = time() + $res_sess_duration;
+                    $_SESSION['response'] = $response;
+                    $_SESSION['message'] = $message;
 
-                            echo "<script>window.location='manage-users.php';</script>";
-                        } elseif ($email_sent === 2) {
-                            $response = "success";
-                            $message = "User account created but something went wrong when sending activation email. Copy and share this link with this user to activate their account: <u>https://portal.obrightonempire.com/login.php?set-password=true&user-id=".$user_id."</u>.";
-                        
-                            $_SESSION['response'] = $response;
-                            $_SESSION['message'] = $message;
-                        
-                            $res_sess_duration = 10;
-                            $_SESSION['expire'] = time() + $res_sess_duration;
+                    $res_sess_duration = 10;
+                    $_SESSION['expire'] = time() + $res_sess_duration;
 
-                            echo "<script>window.location='manage-users.php';</script>";
-                        }
-                    }else{
-                        $response = "success";
-                        $message = "User account created successfully.";
-                    
-                        $_SESSION['response'] = $response;
-                        $_SESSION['message'] = $message;
-                    
-                        $res_sess_duration = 5;
-                        $_SESSION['expire'] = time() + $res_sess_duration;
-
-                        echo "<script>window.location='manage-users.php';</script>";	
-                    }
+                    echo "<script>window.location='manage-users.php';</script>";
+                    exit;
                 } else {
                     $response = "error";
                     $message = "User creation failed. Try again later or contact tech support.";
@@ -651,6 +717,286 @@
         }
     }
 
+    //reset another user's password (admin only)
+    if (isset($_POST['reset_user_password'])) {
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
+
+        if (!Authorization::isAdmin()) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Only admins can reset passwords.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-users.php';</script>";
+            exit;
+        }
+
+        $target_id = InputValidator::validateInteger($_POST['reset_user_id'] ?? 0);
+        if (!$target_id || $target_id <= 0) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Invalid user selected.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-users.php';</script>";
+            exit;
+        }
+
+        if ((int)$target_id === (int)$this_user) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'You cannot reset your own password here.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-users.php';</script>";
+            exit;
+        }
+
+        // Fetch user details for modal + audit
+        $stmt = $con->prepare("SELECT id, user_id, first_name, last_name, email, password_status FROM users WHERE id=? LIMIT 1");
+        if ($stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-users.php';</script>";
+            exit;
+        }
+        $stmt->bind_param('i', $target_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $user_row = $result ? $result->fetch_assoc() : null;
+        $stmt->close();
+
+        if (!$user_row) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'User not found.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-users.php';</script>";
+            exit;
+        }
+
+        // Generate and set a new temporary password
+        $temp_password_plain = generateTempPassword(10);
+        $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
+
+        $update_stmt = $con->prepare("UPDATE users SET password=?, password_status=0 WHERE id=?");
+        if ($update_stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-users.php';</script>";
+            exit;
+        }
+        $update_stmt->bind_param('si', $temp_password_hash, $target_id);
+        $ok = $update_stmt->execute();
+        $update_stmt->close();
+
+        if (!$ok) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-users.php';</script>";
+            exit;
+        }
+
+        // Audit (never store plaintext password)
+        AuditLog::log('UPDATE', 'users', (int)$target_id, array(
+            'action' => 'password_reset',
+            'password_status' => isset($user_row['password_status']) ? (int)$user_row['password_status'] : null,
+            'timestamp' => date('Y-m-d H:i:s')
+        ), array(
+            'action' => 'password_reset',
+            'password_status' => 0,
+            'timestamp' => date('Y-m-d H:i:s')
+        ), (int)$this_user);
+
+        // Store temp password for admin modal
+        $_SESSION['reset_user_temp_password'] = $temp_password_plain;
+        $_SESSION['reset_user_temp_user_id'] = $user_row['user_id'] ?? '';
+        $_SESSION['reset_user_temp_email'] = $user_row['email'] ?? '';
+        $_SESSION['reset_user_temp_name'] = trim(($user_row['first_name'] ?? '') . ' ' . ($user_row['last_name'] ?? ''));
+
+        $_SESSION['response'] = 'success';
+        $_SESSION['message'] = 'Password reset successfully. Copy the temporary password and share it with the user.';
+        $_SESSION['expire'] = time() + 10;
+        echo "<script>window.location='manage-users.php';</script>";
+        exit;
+    }
+
+    //reset a landlord's password (admin only)
+    if (isset($_POST['reset_landlord_password'])) {
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
+
+        $redirect_to = $_SESSION['redirect_url'] ?? 'manage-landlords.php';
+
+        if (!Authorization::isAdmin()) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Only admins can reset passwords.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+
+        $target_id = InputValidator::validateInteger($_POST['reset_landlord_id'] ?? 0);
+        if (!$target_id || $target_id <= 0) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Invalid landlord selected.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+
+        $stmt = $con->prepare("SELECT id, landlord_id, first_name, last_name, email, password_status FROM landlords WHERE id=? LIMIT 1");
+        if ($stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+        $stmt->bind_param('i', $target_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $landlord_row = $result ? $result->fetch_assoc() : null;
+        $stmt->close();
+
+        if (!$landlord_row) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Landlord not found.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+
+        $temp_password_plain = generateTempPassword(10);
+        $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
+
+        $update_stmt = $con->prepare("UPDATE landlords SET password=?, password_status=1 WHERE id=?");
+        if ($update_stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+        $update_stmt->bind_param('si', $temp_password_hash, $target_id);
+        $ok = $update_stmt->execute();
+        $update_stmt->close();
+
+        if (!$ok) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+
+        AuditLog::log('UPDATE', 'landlords', (int)$target_id, array(
+            'action' => 'password_reset',
+            'password_status' => isset($landlord_row['password_status']) ? (int)$landlord_row['password_status'] : null,
+            'timestamp' => date('Y-m-d H:i:s')
+        ), array(
+            'action' => 'password_reset',
+            'password_status' => 1,
+            'timestamp' => date('Y-m-d H:i:s')
+        ), (int)$this_user);
+
+        $_SESSION['reset_landlord_temp_password'] = $temp_password_plain;
+        $_SESSION['reset_landlord_temp_landlord_id'] = $landlord_row['landlord_id'] ?? '';
+        $_SESSION['reset_landlord_temp_email'] = $landlord_row['email'] ?? '';
+        $_SESSION['reset_landlord_temp_name'] = trim(($landlord_row['first_name'] ?? '') . ' ' . ($landlord_row['last_name'] ?? ''));
+
+        $_SESSION['response'] = 'success';
+        $_SESSION['message'] = 'Password reset successfully. Copy the temporary password and share it with the landlord.';
+        $_SESSION['expire'] = time() + 10;
+        echo "<script>window.location='".$redirect_to."';</script>";
+        exit;
+    }
+
+    //reset a tenant's password (admin only)
+    if (isset($_POST['reset_tenant_password'])) {
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
+
+        $redirect_to = $_SESSION['redirect_url'] ?? 'manage-tenants.php';
+
+        if (!Authorization::isAdmin()) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Only admins can reset passwords.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+
+        $target_id = InputValidator::validateInteger($_POST['reset_tenant_id'] ?? 0);
+        if (!$target_id || $target_id <= 0) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Invalid tenant selected.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+
+        $stmt = $con->prepare("SELECT id, tenant_id, first_name, last_name, email, password_status FROM tenants WHERE id=? LIMIT 1");
+        if ($stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+        $stmt->bind_param('i', $target_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $tenant_row = $result ? $result->fetch_assoc() : null;
+        $stmt->close();
+
+        if (!$tenant_row) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Tenant not found.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+
+        $temp_password_plain = generateTempPassword(10);
+        $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
+
+        $update_stmt = $con->prepare("UPDATE tenants SET password=?, password_status=1 WHERE id=?");
+        if ($update_stmt === false) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+        $update_stmt->bind_param('si', $temp_password_hash, $target_id);
+        $ok = $update_stmt->execute();
+        $update_stmt->close();
+
+        if (!$ok) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Password reset failed. Try again later.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='".$redirect_to."';</script>";
+            exit;
+        }
+
+        AuditLog::log('UPDATE', 'tenants', (int)$target_id, array(
+            'action' => 'password_reset',
+            'password_status' => isset($tenant_row['password_status']) ? (int)$tenant_row['password_status'] : null,
+            'timestamp' => date('Y-m-d H:i:s')
+        ), array(
+            'action' => 'password_reset',
+            'password_status' => 1,
+            'timestamp' => date('Y-m-d H:i:s')
+        ), (int)$this_user);
+
+        $_SESSION['reset_tenant_temp_password'] = $temp_password_plain;
+        $_SESSION['reset_tenant_temp_tenant_id'] = $tenant_row['tenant_id'] ?? '';
+        $_SESSION['reset_tenant_temp_email'] = $tenant_row['email'] ?? '';
+        $_SESSION['reset_tenant_temp_name'] = trim(($tenant_row['first_name'] ?? '') . ' ' . ($tenant_row['last_name'] ?? ''));
+
+        $_SESSION['response'] = 'success';
+        $_SESSION['message'] = 'Password reset successfully. Copy the temporary password and share it with the tenant.';
+        $_SESSION['expire'] = time() + 10;
+        echo "<script>window.location='".$redirect_to."';</script>";
+        exit;
+    }
+
     //update own profile (basic info)
     if(isset($_POST['update_profile'])){
         CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
@@ -719,6 +1065,8 @@
     if(isset($_POST['update_password'])){
         CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
 
+        $redirect_page = isset($_SESSION['force_password_change']) ? 'change-password.php' : 'profile.php';
+
         $current_password = $_POST['current_password'] ?? '';
         $new_password = $_POST['new_password'] ?? '';
         $confirmed_password = $_POST['confirmed_password'] ?? '';
@@ -727,7 +1075,7 @@
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'All password fields are required.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='profile.php';</script>";
+            echo "<script>window.location='".$redirect_page."';</script>";
             exit;
         }
 
@@ -735,7 +1083,7 @@
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Passwords do not match. Please confirm your new password.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='profile.php';</script>";
+            echo "<script>window.location='".$redirect_page."';</script>";
             exit;
         }
 
@@ -744,7 +1092,7 @@
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Password update failed. Try again later.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='profile.php';</script>";
+            echo "<script>window.location='".$redirect_page."';</script>";
             exit;
         }
 
@@ -758,17 +1106,17 @@
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Incorrect current password.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='profile.php';</script>";
+            echo "<script>window.location='".$redirect_page."';</script>";
             exit;
         }
 
         $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
-        $update_stmt = $con->prepare("UPDATE users SET password=? WHERE id=?");
+        $update_stmt = $con->prepare("UPDATE users SET password=?, password_status=1 WHERE id=?");
         if ($update_stmt === false) {
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Password update failed. Try again later.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='profile.php';</script>";
+            echo "<script>window.location='".$redirect_page."';</script>";
             exit;
         }
 
@@ -784,6 +1132,12 @@
             $_SESSION['response'] = 'success';
             $_SESSION['message'] = 'Password updated successfully.';
             $_SESSION['expire'] = time() + 5;
+
+            if (isset($_SESSION['force_password_change'])) {
+                unset($_SESSION['force_password_change']);
+                echo "<script>window.location='index.php';</script>";
+                exit;
+            }
         } else {
             $update_stmt->close();
             $_SESSION['response'] = 'error';
@@ -791,7 +1145,7 @@
             $_SESSION['expire'] = time() + 10;
         }
 
-        echo "<script>window.location='profile.php';</script>";
+        echo "<script>window.location='".$redirect_page."';</script>";
         exit;
     }
 
@@ -888,10 +1242,17 @@
         $contact_number = InputValidator::sanitizeText($_POST['contact_number'] ?? '');	
         $uploader = intval($_POST['uploader'] ?? 0);	
 
+        // Generate a temporary password for the landlord (admin shares this with the landlord)
+        $temp_password_plain = generateTempPassword(10);
+        $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
+
+        // password_status: 1 = admin-set/default (temporary; must change)
+        $password_status = 1;
+
         // PHASE 5: Use prepared statement for INSERT
-        $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, uploader_id) VALUES (?, ?, ?, ?, ?)");
+        $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, password, password_status, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
         if($stmt !== false){
-            $stmt->bind_param("ssssi", $first_name, $last_name, $contact_number, $email_address, $uploader);
+            $stmt->bind_param("sssssii", $first_name, $last_name, $contact_number, $email_address, $temp_password_hash, $password_status, $uploader);
             if($stmt->execute()){
                 $inserted_id = $stmt->insert_id;
                 $stmt->close();
@@ -907,6 +1268,12 @@
                 
                 // PHASE 5: Log landlord creation
                 AuditLog::log('INSERT', 'landlords', $inserted_id, null, array('landlord_id' => $landlord_id, 'email' => $email_address, 'timestamp' => date('Y-m-d H:i:s')), $uploader);
+
+                // Store temp password for admin modal (never store plaintext in DB/audit)
+                $_SESSION['new_landlord_temp_password'] = $temp_password_plain;
+                $_SESSION['new_landlord_temp_landlord_id'] = $landlord_id;
+                $_SESSION['new_landlord_temp_email'] = $email_address;
+                $_SESSION['new_landlord_temp_name'] = trim($first_name . ' ' . $last_name);
 
                 $response = "success";
                 $message = "New landlord listed successfully.";
@@ -1284,13 +1651,19 @@
         $pending_amount = floatval($_POST['pending_amount']);
         $uploader = intval($_POST['uploader']);
 
+        // Generate a temporary password for the tenant (admin shares this with the tenant)
+        $temp_password_plain = generateTempPassword(10);
+        $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
+        // password_status: 1 = admin-set/default (temporary; must change)
+        $password_status = 1;
+
         // PHASE 5: Use prepared statement for INSERT tenant
         $property_int = intval($property);
         $paymentfrequency = $_POST['paymentfrequency'];
         $rentamount = floatval($_POST['rentamount']);
-        $stmt = $con->prepare("INSERT INTO tenants(property_id, flat_number, apartment_type, first_name, last_name, email, phone, pmt_frequency, pmt_amount, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $con->prepare("INSERT INTO tenants(property_id, flat_number, apartment_type, first_name, last_name, email, phone, pmt_frequency, pmt_amount, password, password_status, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         if($stmt !== false){
-            $stmt->bind_param("isssssssdi", $property_int, $flatnumber, $apartmenttype, $firstname, $lastname, $email, $contact, $paymentfrequency, $rentamount, $uploader);
+            $stmt->bind_param("isssssssdsii", $property_int, $flatnumber, $apartmenttype, $firstname, $lastname, $email, $contact, $paymentfrequency, $rentamount, $temp_password_hash, $password_status, $uploader);
             if($stmt->execute()){
                 $inserted_id = $stmt->insert_id;
                 $stmt->close();
@@ -1303,6 +1676,12 @@
                 $update_stmt->bind_param("si", $tenant_id, $inserted_id);
                 $update_stmt->execute();
                 $update_stmt->close();
+
+                // Store temp password for admin modal (never store plaintext in DB/audit)
+                $_SESSION['new_tenant_temp_password'] = $temp_password_plain;
+                $_SESSION['new_tenant_temp_tenant_id'] = $tenant_id;
+                $_SESSION['new_tenant_temp_email'] = $email;
+                $_SESSION['new_tenant_temp_name'] = trim($firstname . ' ' . $lastname);
 
                 // PHASE 5: Use prepared statement for payment history INSERT
                 $stmt2 = $con->prepare("INSERT INTO payment_history(tenant_id, due_date, expected_amount, payment_date, paid_amount) VALUES (?, ?, ?, ?, ?)");

@@ -78,6 +78,14 @@
             $delete_page = "manage-landlords";
 
             include("_include/modals/delete-modal.php"); 
+
+            $reset_target_id = $_id;
+            $reset_target = "Landlord: ".$_first_name." ".$_last_name;
+            $reset_message = "This will reset this landlord's password and force them to change it on their next login. Do you want to proceed?";
+            $reset_page = "view-details";
+            if (Authorization::isAdmin()) {
+                include("_include/modals/reset-landlord-password-modal.php");
+            }
         }
 ?>
 <div class="content-body">
@@ -110,10 +118,17 @@
                                 <p>Landlord - <?php echo $_landlord_id; ?></p>
                             </div>
                             <hr>
-                            <?php echo "
+                            <?php
+                                $reset_landlord_btn = '';
+                                if (Authorization::isAdmin()) {
+                                    $reset_landlord_btn = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_landlord_".$_id."' title='Reset Password' class='btn btn-primary btn-sm ms-2'>Reset Password &nbsp; <i class='fas fa-key'></i></a>";
+                                }
+
+                                echo "
                                 <div>
                                     <a href='?target=update-landlord&id=".$_id."&view_target=landlords&source=manage-landlords' title='Edit Landlord' ".$agent_hidden." class='btn btn-secondary btn-sm ms-2'>Edit &nbsp; <i class='fa fa-pencil'></i></a>
                                     <a type='button' data-bs-toggle='modal' ".$agent_hidden." data-bs-target='#exampleModalCenter_".$_id."' title='Delete Landlord' class='btn btn-danger btn-sm ms-2'>Delete &nbsp; <i class='fa fa-trash'></i></a>
+                                    ".$reset_landlord_btn."
                                 </div>	
                                 <div style='margin-top: 15px;'>
                                     <a href='requests.php?id=".$_id."&source=landlords' class='btn btn-success btn-sm ms-2'>View all Conversations: ".$open_tickets_count." Open &nbsp; <i class='fa fa-question-circle'></i></a>
@@ -1436,6 +1451,14 @@
             $delete_page = "manage-tenants";
 
             include("_include/modals/delete-modal.php"); 
+
+            $reset_target_id = $_id;
+            $reset_target = "Tenant: ".$_first_name." ".$_last_name." (".$_tenant_id.")";
+            $reset_message = "This will reset this tenant's password and force them to change it on their next login. Do you want to proceed?";
+            $reset_page = "view-details";
+            if (Authorization::isAdmin()) {
+                include("_include/modals/reset-tenant-password-modal.php");
+            }
         }
 ?>
 <script>
@@ -1495,6 +1518,7 @@
                                 <div ".$agent_hidden.">
                                     <a href='?target=update-tenant&id=".$_id."&view_target=tenants&source=manage-tenants' title='Edit Tenant' class='btn btn-secondary btn-sm ms-2'>Edit &nbsp; <i class='fa fa-pencil'></i></a>
                                     <a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_".$_id."' title='Delete Tenant' class='btn btn-danger btn-sm ms-2'>Delete &nbsp; <i class='fa fa-trash'></i></a>
+                                    ".(Authorization::isAdmin() ? "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_tenant_".$_id."' title='Reset Password' class='btn btn-primary btn-sm ms-2'>Reset Password &nbsp; <i class='fas fa-key'></i></a>" : "")."
                                 </div>
                                 <div style='margin-top: 15px;'>
                                     <a href='requests.php?id=".$_id."&source=tenants' class='btn btn-success btn-sm ms-2'>View all Conversations: ".$open_tickets_count." Open &nbsp; <i class='fa fa-question-circle'></i></a>
@@ -1703,6 +1727,12 @@
                 $_status_action = "<a type='button' data-bs-toggle='modal' ".$editor_hidden." data-bs-target='#exampleModalCenter_activate_".$_id."' title='Activate User' class='btn btn-success btn-sm ms-2'>Activate User &nbsp; <i class='fas fa-check'></i></a>";
             }	
 
+            // Admin-only reset password button (hidden when viewing self)
+            $reset_password_btn = '';
+            if (Authorization::isAdmin() && (int)$this_user !== (int)$_id) {
+                $reset_password_btn = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_".$_id."' title='Reset Password' class='btn btn-primary btn-sm ms-2'>Reset Password &nbsp; <i class='fas fa-key'></i></a>";
+            }
+
             if($this_user == $_id){
                 $user_actions = "";
             }else{
@@ -1714,6 +1744,7 @@
                         <div>
                             <a href='?id=".$_id."&target=update-user&view_target=users&source=".$target_source."' title='Edit User' class='btn btn-secondary btn-sm ms-2'>Edit &nbsp; <i class='fa fa-pencil'></i></a>
                             ".$_status_action."
+                            ".$reset_password_btn."
                             <a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_".$_id."' title='Delete User' class='btn btn-danger btn-sm ms-2'>Delete &nbsp; <i class='fa fa-trash'></i></a>
                         </div>	
                     ";
@@ -1723,6 +1754,7 @@
                         <div style='margin-bottom: 15px;'>
                             <a href='?id=".$_id."&target=update-user&view_target=users&source=".$target_source."' ".$editor_hidden." title='Edit User' class='btn btn-secondary btn-sm ms-2'>Edit &nbsp; <i class='fa fa-pencil'></i></a>
                             ".$_status_action."
+                            ".$reset_password_btn."
                         </div>
                         <div>
                             <a href='access-management.php?id=".$_id."' title='Manage Access' ".$editor_hidden." class='btn btn-primary btn-sm ms-2'>Manage Access &nbsp; <i class='fa fa-key'></i></a>
@@ -1753,9 +1785,18 @@
             $activation_target_param = "id=".$target_id."&target=users&";
             $activation_page = "view-details";
 
+            // Reset password modal (admin-only; hidden when viewing self)
+            $reset_target_id = $_id;
+            $reset_target = $_role.": ".$_first_name." ".$_last_name;
+            $reset_message = "This will reset this user's password and force them to change it on their next login. Do you want to proceed?";
+            $reset_page = "view-details";
+
             include("_include/modals/delete-modal.php"); 
             include("_include/modals/suspend-modal.php"); 
             include("_include/modals/activate-modal.php"); 
+            if (Authorization::isAdmin() && (int)$this_user !== (int)$_id) {
+                include("_include/modals/reset-password-modal.php");
+            }
         }
 ?>
 <div class="content-body">

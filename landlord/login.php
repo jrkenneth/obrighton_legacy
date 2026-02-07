@@ -37,6 +37,7 @@
 <link rel="stylesheet" href="css/jquery-ui.min.css">
 <!-- Responsive stylesheet -->
 <link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="../css/obe-brand.css">
 <!-- Title -->
 <title>Landlord Portal Login - O.BRIGHTON EMPIRE LIMITED</title>
 <!-- Favicon -->
@@ -62,7 +63,7 @@
             <form method="POST">
               <div class="log-reg-form signup-modal form-style1 bgc-white p50 p30-sm default-box-shadow2 bdrs12">
                 <div class="text-center mb40">
-                  <img class="mb25" src="images/logo-full.png" alt="">
+                  <img class="mb25" src="images/logo-full.png" style="width: 200px;" alt="">
                   <h2>Sign in</h2>
                   <p class="text"><?php echo $message; ?></p>
                 </div>
@@ -75,7 +76,7 @@
                   <input type="password" name="password" value="<?php echo $password; ?>" class="form-control" placeholder="Enter Password" required>
                 </div>
                 <div class="checkbox-style1 d-block d-sm-flex align-items-center justify-content-between mb10">
-                  <a class="fz14 ff-heading" href="#">Lost your password?</a>
+                  <a class="fz14 ff-heading" href="forgot-password.php">Lost your password?</a>
                 </div>
                 <div class="d-grid mb20">
                   <button class="ud-btn btn-thm" type="submit" name="login">Sign in <i class="fal fa-arrow-right-long"></i></button>

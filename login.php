@@ -53,7 +53,8 @@
 	<!-- FAVICONS ICON -->
 	<link rel="shortcut icon" type="image/png" href="images/favicon.png">
 	<link href="vendor/bootstrap-select/dist/css/bootstrap-select.min.css" rel="stylesheet">
-   <link href="css/style.css" rel="stylesheet">
+	<link href="css/style.css" rel="stylesheet">
+	<link href="css/obe-brand.css" rel="stylesheet">
 
 </head>
 
@@ -97,8 +98,8 @@
                 <div class="col-xl-6 col-lg-6">
 					<div class="pages-left h-100">
 						<div class="login-content">
-							<a href="index.php"><img src="images/logo-full.png" class="mb-3 logo-dark" alt=""></a>
-							<a href="index.php"><img src="images/logi-white.png" class="mb-3 logo-light" alt=""></a>
+							<a href="index.php"><img src="images/logo-full.png" style="width: 200px;" class="mb-3 logo-dark" alt=""></a>
+							<a href="index.php"><img src="images/logi-white.png" style="width: 200px;" class="mb-3 logo-light" alt=""></a>
 							
 							<p>Find Your Dream Home</p>
 						</div>

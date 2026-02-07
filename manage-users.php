@@ -102,12 +102,14 @@
 														}else if($_role == "Admin"){
 															$user_actions = 
 																$_status_action."
+																<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_".$_id."' class='dropdown-item'>Reset Password</a>
 																<a class='dropdown-item' href='?target=update-user&id=".$_id."'>Edit User</a>
 																<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_".$_id."' class='dropdown-item'>Delete User</a>
 															";
 														}else{
 															$user_actions = 
 																$_status_action."
+																<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_".$_id."' class='dropdown-item'>Reset Password</a>
 																<a class='dropdown-item' href='?target=update-user&id=".$_id."'>Edit User</a>
 																<a class='dropdown-item' href='access-management.php?id=".$_id."'>Manage Access</a>
 																<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_".$_id."' class='dropdown-item'>Delete User</a>
@@ -158,10 +160,16 @@
 													$activation_target_name = "activate-user";
 													$activation_target_param = "";
 													$activation_page = "manage-users";
+
+													$reset_target_id = $_id;
+													$reset_target = $_role.": ".$_first_name." ".$_last_name;
+													$reset_message = "This will reset this user's password and force them to change it on their next login. Do you want to proceed?";
+													$reset_page = "manage-users";
 			
 													include("_include/modals/delete-modal.php"); 
 													include("_include/modals/suspend-modal.php"); 
 													include("_include/modals/activate-modal.php"); 
+													include("_include/modals/reset-password-modal.php"); 
 												}
 											?>
 										</tbody>
@@ -180,5 +188,132 @@
         ***********************************-->
 <?php
 	include("_include/modals/add-user-modal-form.php");
+
+	if(isset($_SESSION['new_user_temp_password'])){
+		$new_user_temp_password = $_SESSION['new_user_temp_password'];
+		$new_user_temp_user_id = $_SESSION['new_user_temp_user_id'] ?? '';
+		$new_user_temp_email = $_SESSION['new_user_temp_email'] ?? '';
+		$new_user_temp_name = $_SESSION['new_user_temp_name'] ?? '';
+
+		unset($_SESSION['new_user_temp_password'], $_SESSION['new_user_temp_user_id'], $_SESSION['new_user_temp_email'], $_SESSION['new_user_temp_name']);
+		?>
+		<div class="modal fade" id="tempPasswordModal" tabindex="-1" aria-labelledby="tempPasswordModalLabel" aria-hidden="true">
+			<div class="modal-dialog modal-dialog-centered">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title" id="tempPasswordModalLabel">Temporary Password</h5>
+						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+					</div>
+					<div class="modal-body">
+						<p class="mb-2">Share this temporary password with the new user. They will be forced to change it on first login.</p>
+						<div class="mb-2"><strong>User ID:</strong> <?php echo htmlspecialchars($new_user_temp_user_id, ENT_QUOTES, 'UTF-8'); ?></div>
+						<div class="mb-2"><strong>Name:</strong> <?php echo htmlspecialchars($new_user_temp_name, ENT_QUOTES, 'UTF-8'); ?></div>
+						<div class="mb-3"><strong>Email:</strong> <?php echo htmlspecialchars($new_user_temp_email, ENT_QUOTES, 'UTF-8'); ?></div>
+						<div class="p-3 bg-light rounded d-flex align-items-center justify-content-between" style="gap: 10px;">
+							<input type="text" class="form-control" id="tempPasswordValue" value="<?php echo htmlspecialchars($new_user_temp_password, ENT_QUOTES, 'UTF-8'); ?>" readonly>
+							<button type="button" class="btn btn-primary" id="copyTempPasswordBtn">Copy</button>
+						</div>
+						<div class="small text-muted mt-2">Tip: Ask the user to login and change it immediately.</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			document.addEventListener('DOMContentLoaded', function () {
+				try {
+					var modalEl = document.getElementById('tempPasswordModal');
+					var modal = new bootstrap.Modal(modalEl);
+					modal.show();
+				} catch (e) {}
+
+				var btn = document.getElementById('copyTempPasswordBtn');
+				var input = document.getElementById('tempPasswordValue');
+				if (btn && input) {
+					btn.addEventListener('click', async function () {
+						input.select();
+						input.setSelectionRange(0, 99999);
+						try {
+							await navigator.clipboard.writeText(input.value);
+							btn.textContent = 'Copied';
+							setTimeout(function(){ btn.textContent = 'Copy'; }, 1200);
+						} catch (e) {
+							document.execCommand('copy');
+							btn.textContent = 'Copied';
+							setTimeout(function(){ btn.textContent = 'Copy'; }, 1200);
+						}
+					});
+				}
+			});
+		</script>
+		<?php
+	}
+
+	if(isset($_SESSION['reset_user_temp_password'])){
+		$reset_user_temp_password = $_SESSION['reset_user_temp_password'];
+		$reset_user_temp_user_id = $_SESSION['reset_user_temp_user_id'] ?? '';
+		$reset_user_temp_email = $_SESSION['reset_user_temp_email'] ?? '';
+		$reset_user_temp_name = $_SESSION['reset_user_temp_name'] ?? '';
+
+		unset($_SESSION['reset_user_temp_password'], $_SESSION['reset_user_temp_user_id'], $_SESSION['reset_user_temp_email'], $_SESSION['reset_user_temp_name']);
+		?>
+		<div class="modal fade" id="tempPasswordModal" tabindex="-1" aria-labelledby="tempPasswordModalLabel" aria-hidden="true">
+			<div class="modal-dialog modal-dialog-centered">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title" id="tempPasswordModalLabel">Temporary Password</h5>
+						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+					</div>
+					<div class="modal-body">
+						<p class="mb-2">Share this temporary password with the user. They will be forced to change it on their next login.</p>
+						<div class="mb-2"><strong>User ID:</strong> <?php echo htmlspecialchars($reset_user_temp_user_id, ENT_QUOTES, 'UTF-8'); ?></div>
+						<div class="mb-2"><strong>Name:</strong> <?php echo htmlspecialchars($reset_user_temp_name, ENT_QUOTES, 'UTF-8'); ?></div>
+						<div class="mb-3"><strong>Email:</strong> <?php echo htmlspecialchars($reset_user_temp_email, ENT_QUOTES, 'UTF-8'); ?></div>
+						<div class="p-3 bg-light rounded d-flex align-items-center justify-content-between" style="gap: 10px;">
+							<input type="text" class="form-control" id="tempPasswordValue" value="<?php echo htmlspecialchars($reset_user_temp_password, ENT_QUOTES, 'UTF-8'); ?>" readonly>
+							<button type="button" class="btn btn-primary" id="copyTempPasswordBtn">Copy</button>
+						</div>
+						<div class="small text-muted mt-2">Tip: Ask the user to login and change it immediately.</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			document.addEventListener('DOMContentLoaded', function () {
+				try {
+					var modalEl = document.getElementById('tempPasswordModal');
+					var modal = new bootstrap.Modal(modalEl);
+					modal.show();
+				} catch (e) {}
+
+				var btn = document.getElementById('copyTempPasswordBtn');
+				var input = document.getElementById('tempPasswordValue');
+				if (btn && input) {
+					btn.addEventListener('click', async function () {
+						input.select();
+						input.setSelectionRange(0, 99999);
+						try {
+							await navigator.clipboard.writeText(input.value);
+							btn.textContent = 'Copied';
+							setTimeout(function(){ btn.textContent = 'Copy'; }, 1200);
+						} catch (e) {
+							document.execCommand('copy');
+							btn.textContent = 'Copied';
+							setTimeout(function(){ btn.textContent = 'Copy'; }, 1200);
+						}
+					});
+				}
+			});
+		</script>
+		<?php
+	}
+
 	include("_include/footer.php");
 ?>

@@ -37,6 +37,9 @@ include("_includes/route-handlers.php");
 
 <!-- Responsive stylesheet -->
 <link rel="stylesheet" href="css/responsive.css">
+
+<!-- O.BRIGHTON brand overrides -->
+<link rel="stylesheet" href="../css/obe-brand.css">
 <!-- Title -->
 <title>O.BRIGHTON EMPIRE LIMITED - Landlord Portal</title>
 <!-- Favicon -->

@@ -34,7 +34,7 @@
 									$_location_country=$row['location_country'];
 									$_no_of_apartments=$row['no_of_apartments'];
 									$_uploader_id=$row['uploader_id'];
-									$_owner_id=$row['owner_id'];
+									$_owner_id = $row['owner_id'] ?? null;
 
 									if($_type == "Rent"){
 										$this_properties_listings="SELECT * FROM listings where property_id='".$_id."'";

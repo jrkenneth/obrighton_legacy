@@ -251,12 +251,9 @@
 										<a href="audit-logs.php" class="btn btn-light btn-sm">Clear filters</a>
 									</div>
 								</form>
-							</div>
-						</div>
-
-						<div class="card h-auto">
-							<div class="card-body p-0">
-								<div class="table-responsive" style="min-height: 400px;">
+                                <hr class="my-3">
+                                
+                                <div class="table-responsive" style="min-height: 400px;">
 									<table class="table table-striped mb-0">
 										<thead>
 											<tr>
