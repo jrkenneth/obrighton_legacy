@@ -1,6 +1,5 @@
 <?php
-	
-    include("../_include/dbconnect.php");
+include("../_include/dbconnect.php");
 
 	if(isset($_SESSION['this_landlord'])){
 		echo "<script>window.location='index.php';</script>";

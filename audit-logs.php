@@ -1,17 +1,16 @@
-
 <?php
-	$page_title = "Audit Logs";
+$page_title = "Audit Logs";
 
-	// Pre-check access before rendering the full layout
-	include("_include/session_mgr.php");
+// Pre-check access before rendering the full layout
+include("_include/session_mgr.php");
 
-	if (!isset($tu_role_id) || $tu_role_id != "1") {
-		$_SESSION['response'] = 'error';
-		$_SESSION['message'] = 'Access denied. Admins only.';
-		$_SESSION['expire'] = time() + 10;
-		echo "<script>window.location='index.php';</script>";
-		exit;
-	}
+if (!isset($tu_role_id) || $tu_role_id != "1") {
+	$_SESSION['response'] = 'error';
+	$_SESSION['message'] = 'Access denied. Admins only.';
+	$_SESSION['expire'] = time() + 10;
+	echo "<script>window.location='index.php';</script>";
+	exit;
+}
 
 	// Filters
 	$allowed_actions = ['INSERT', 'UPDATE', 'DELETE'];
