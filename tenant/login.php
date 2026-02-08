@@ -73,7 +73,12 @@
                 </div>
                 <div class="mb15">
                   <label class="form-label fw600 dark-color">Password</label>
-                  <input type="password" name="password" value="<?php echo $password; ?>" class="form-control" placeholder="Enter Password" required>
+                  <div style="position: relative;">
+                    <input type="password" id="tenantPassword" name="password" value="<?php echo $password; ?>" class="form-control" placeholder="Enter Password" required style="padding-right: 40px;">
+                    <span onclick="togglePasswordVisibility('tenantPassword', this)" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #666;">
+                      <i class="fa fa-eye-slash" id="tenantPasswordIcon"></i>
+                    </span>
+                  </div>
                 </div>
                 <div class="checkbox-style1 d-block d-sm-flex align-items-center justify-content-between mb10">
                   <a class="fz14 ff-heading" href="forgot-password.php">Lost your password?</a>
@@ -99,6 +104,21 @@
 <script src="js/wow.min.js"></script>
 <!-- Custom script for all pages --> 
 <script src="js/script.js"></script>
+<script>
+function togglePasswordVisibility(inputId, iconSpan) {
+  var input = document.getElementById(inputId);
+  var icon = iconSpan.querySelector('i');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.classList.remove('fa-eye-slash');
+    icon.classList.add('fa-eye');
+  } else {
+    input.type = 'password';
+    icon.classList.remove('fa-eye');
+    icon.classList.add('fa-eye-slash');
+  }
+}
+</script>
 </body>
 
 </html>

@@ -48,18 +48,6 @@ if($target == "update-landlord"){
                                 <label for="exampleFormControlInput3" class="form-label">Contact Number<span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" value="<?php echo $gl_phone_number; ?>" name="contact_number" id="exampleFormControlInput3" placeholder="" required>
                             </div>
-                            <div class="col-xl-12">
-                                <hr style="margin-top: 15px;">
-                            </div>
-                            <div class="col-xl-6 mb-4 position-relative">
-								<label class="mb-1 text-dark">Reset Password</label>
-                                <p><small>Only fill this field if you want to reset the password for this Landlord</small></p>
-								<input type="password" name="reset_landlord_password" id="dz-password" class="form-control" placeholder="Enter new password">
-								<span class="show-pass eye">
-									<i class="fa fa-eye-slash"></i>
-									<i class="fa fa-eye"></i>
-								</span>
-							</div>
                         </div>
                         <button type="submit" name="update_landlord" class="btn btn-primary">Submit Changes</button>
                         <a href="<?php echo $_SESSION['redirect_url']; ?>" class="btn btn-danger">Cancel</a>
@@ -948,7 +936,7 @@ if($target == "update-artisan"){
                                             if($gas_count < 1){
                                                 echo "<label style='text-transform: uppercase;'><input type='checkbox' name='service[]' value='".$_service_id."'> ".$_service."</label><br>";
                                             }else{
-                                                echo "<a class='text-danger' title='Remove Service' href='?action=remove-artisan-service&id=".$_service_id."&artisan=".$u_id."'><i class='fa fa-ban'></i></a> ".$_service."<br>";
+                                                echo "<a class='text-danger' title='Remove Service' href='?action=remove-artisan-service&id=".$_service_id."&artisan=".$u_id."&csrf_token=".urlencode(CSRFProtection::getToken())."'><i class='fa fa-ban'></i></a> ".$_service."<br>";
                                             }
                                         }
                                     ?>

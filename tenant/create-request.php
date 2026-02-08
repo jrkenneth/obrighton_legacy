@@ -39,6 +39,7 @@
             <div class="col-xl-12">
               <div class="ps-widget bgc-white bdrs12 default-box-shadow2 p30 mb30 overflow-hidden position-relative">
                 <form method="POST" enctype="multipart/form-data">
+                  <?php if (class_exists('CSRFProtection')) { CSRFProtection::tokenField(); } ?>
                   <div class="row">
                     <div class="col-xl-12 mb-3">
                       <label for="title" class="form-label">Title <span class="text-danger">*</span></label>

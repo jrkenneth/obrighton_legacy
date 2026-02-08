@@ -87,7 +87,7 @@
 	</div>
 	<div class="offcanvas-body">
 		<div class="container-fluid">
-			<form method="POST" enctype="multipart/form-data">
+			<form id="addPropertyForm" method="POST" action="" enctype="multipart/form-data">
 				<?php CSRFProtection::tokenField(); // SECURITY: Phase 4 - CSRF Protection ?>
 				<div class="row">
 					<div class="col-xl-12 mb-3">
@@ -246,8 +246,8 @@
 					</div>	
 				</div>
 				<div>
-					<button type="submit" name="submit_new_property" value='1' class="btn btn-primary me-1">Submit</button>
-					<button type="submit" name="submit_property_add_tenants" value='2' class="btn btn-warning me-1">Submit & add Tenants</button>
+					<button type="submit" name="submit_new_property" value="1" class="btn btn-primary me-1">Submit</button>
+					<button type="submit" name="submit_property_add_tenants" value="2" class="btn btn-warning me-1">Submit & add Tenants</button>
 				</div>
 			</form>
 		</div>

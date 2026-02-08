@@ -1,4 +1,5 @@
 <?php
+require_once(__DIR__ . '/../../_include/CSRFProtection.php');
 //--Start Counts
     //Properties count
     $properties_count_query="SELECT * FROM properties where landlord_id='".$this_landlord."'";
@@ -62,30 +63,41 @@
 
     //login
     if( isset($_POST['login']) ){
-        $user=$_POST['user'];
-        $password=$_POST['password'];	
-        
-        $login_query="SELECT * FROM landlords WHERE landlord_id='".$user."'";
-        $run_lq=mysqli_query($con, $login_query);
-        $row=mysqli_fetch_array($run_lq);
-        $count_lq_rows = mysqli_num_rows($run_lq);
-                
-        if($count_lq_rows == 1) 
-        {
-            $id = $row['id'];
-            $this_password = $row['password'];
-            $first_name = $row['first_name'];
-            
-            if(password_verify($password, $this_password)){
-                $_SESSION['this_landlord'] = $id;
+        $user = trim((string)($_POST['user'] ?? ''));
+        $password = (string)($_POST['password'] ?? '');	
 
-                $message = "<span class='text-success'>Login attempt successful, Welcome ".$first_name."!</span>";
-                echo "<meta http-equiv='refresh' content='3; url=index.php' >";
-            }else{
-                $message = "<span class='text-danger'>Login attempt failed. Incorrect password provided, try again.</span>";
+        if ($user === '' || $password === '') {
+            $message = "<span class='text-danger'>Login attempt failed. Please enter your credentials.</span>";
+        } else {
+            $stmt = $con->prepare("SELECT id, password, first_name FROM landlords WHERE landlord_id=? LIMIT 1");
+            $row = null;
+            if ($stmt) {
+                $stmt->bind_param('s', $user);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $row = $res ? $res->fetch_assoc() : null;
+                $stmt->close();
             }
-        }else{
-            $message = "<span class='text-danger'>Login attempt failed! Landlord not found, try again.</span>";
+
+            if ($row) {
+                $id = (int)$row['id'];
+                $this_password = (string)($row['password'] ?? '');
+                $first_name = (string)($row['first_name'] ?? '');
+
+                if ($this_password !== '' && password_verify($password, $this_password)) {
+                    if (session_status() === PHP_SESSION_ACTIVE) {
+                        @session_regenerate_id(true);
+                    }
+                    $_SESSION['this_landlord'] = $id;
+
+                    $message = "<span class='text-success'>Login attempt successful, Welcome ".$first_name."!</span>";
+                    echo "<meta http-equiv='refresh' content='1; url=index.php' >";
+                } else {
+                    $message = "<span class='text-danger'>Login attempt failed. Incorrect password provided, try again.</span>";
+                }
+            } else {
+                $message = "<span class='text-danger'>Login attempt failed! Landlord not found, try again.</span>";
+            }
         }
     }	
 
@@ -262,161 +274,222 @@
 
     //create new ticket
     if(isset($_POST['create_new_ticket'])){	
-        $person_id = $_POST['person_id'];
-        $target = $_POST['target'];
-        $title = $_POST['title'];
-        $type = $_POST['type'];
-        $ticket_message =$_POST['message'];
-        $uploader =$_POST['uploader'];
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
+
+        $person_id = (int)$this_landlord;
+        $target = 'landlords';
+        $title = trim((string)($_POST['title'] ?? ''));
+        $type = filter_var($_POST['type'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $ticket_message = trim((string)($_POST['message'] ?? ''));
         $date_time = date("Y-m-d H:i:s");
 
-        $submit_ticket = "INSERT INTO tickets(title, `type`, person_id, `target`, date_opened)values('".mysqli_real_escape_string($con, $title)."','".$type."','".$person_id."','".$target."','".$date_time."')";
-        $post_st = mysqli_query($con, $submit_ticket);
-                                
-        if ($post_st) {
-            $inserted_id = mysqli_insert_id($con);
-
-            //Create and add Request ID
-            function getName($n) {
-                $characters = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                $randomString = '';
-             
-                for ($i = 0; $i < $n; $i++) {
-                    $index = rand(0, strlen($characters) - 1);
-                    $randomString .= $characters[$index];
-                }
-                return $randomString;
+        if ($title === '' || mb_strlen($title) > 255) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Please enter a valid title (max 255 characters).';
+            $_SESSION['expire'] = time() + 10;
+        } elseif (!$type) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Please select a valid request type.';
+            $_SESSION['expire'] = time() + 10;
+        } else {
+            // Ensure ticket type exists
+            $type_ok = false;
+            $type_stmt = $con->prepare("SELECT 1 FROM ticket_type WHERE id=? LIMIT 1");
+            if ($type_stmt) {
+                $type_stmt->bind_param('i', $type);
+                $type_stmt->execute();
+                $type_res = $type_stmt->get_result();
+                $type_ok = ($type_res && $type_res->fetch_row());
+                $type_stmt->close();
             }
 
-            $ticket_id = getName(7);
-            $add_ticket_id = "UPDATE tickets set complaint_id='".$ticket_id."' where id='".$inserted_id."'";
-            $post_ati = mysqli_query($con, $add_ticket_id);
+            if (!$type_ok) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid request type selected.';
+                $_SESSION['expire'] = time() + 10;
+            } else {
+                $stmt = $con->prepare("INSERT INTO tickets(title, `type`, person_id, `target`, date_opened) VALUES(?,?,?,?,?)");
+                $post_st = false;
+                if ($stmt) {
+                    $stmt->bind_param('siiss', $title, $type, $person_id, $target, $date_time);
+                    $post_st = $stmt->execute();
+                    $inserted_id = $stmt->insert_id;
+                    $stmt->close();
+                }
+                                
+                if ($post_st && $inserted_id) {
+                    // Generate a 7-character alphanumeric request ID
+                    $alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                    $ticket_code = '';
+                    for ($i = 0; $i < 7; $i++) {
+                        $ticket_code .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+                    }
 
-            if(!empty($ticket_message)){
-                //submit message to db
-                $sender = $_POST['sender'];
-                $submit_ticket_message = "INSERT INTO ticket_messages(`date`, complaint_id, message, sender, admin_id)values('".$date_time."','".$ticket_id."','".mysqli_real_escape_string($con, $ticket_message)."','".$sender."',NULLIF('".$uploader."', ''))";
-                $post_stm = mysqli_query($con, $submit_ticket_message);
+                    $upd = $con->prepare("UPDATE tickets SET complaint_id=? WHERE id=?");
+                    if ($upd) {
+                        $upd->bind_param('si', $ticket_code, $inserted_id);
+                        $upd->execute();
+                        $upd->close();
+                    }
 
-                $message_inserted_id = mysqli_insert_id($con);
-                $extension=array("jpeg","jpg","png","gif","pdf","doc","docx","txt","heif","webp","svg","mp4","mov","xls","csv");
+                    // Insert initial message (required by UI)
+                    $sender = 'landlord';
+                    $message_inserted_id = null;
+                    if ($ticket_message !== '') {
+                        $msg = $con->prepare("INSERT INTO ticket_messages(`date`, complaint_id, message, sender, admin_id) VALUES(?,?,?,?,NULL)");
+                        if ($msg) {
+                            $msg->bind_param('ssss', $date_time, $ticket_code, $ticket_message, $sender);
+                            $ok_msg = $msg->execute();
+                            $message_inserted_id = $ok_msg ? $msg->insert_id : null;
+                            $msg->close();
+                        }
+                    }
 
-                foreach($_FILES["files"]["tmp_name"] as $key=>$tmp_name) {
-                    $file_name=$_FILES["files"]["name"][$key];
-                    $file_tmp=$_FILES["files"]["tmp_name"][$key];
-                    $ext=pathinfo($file_name,PATHINFO_EXTENSION);
-
-                    if(in_array($ext,$extension)) {
-                        if(!file_exists("../file_uploads/tickets_media/".$file_name)) {
-                            move_uploaded_file($file_tmp, "../file_uploads/tickets_media/".$file_name);
-
-                            $submit_ticket_file = "INSERT INTO ticket_media(ticket_message_id, `file`)values('".$message_inserted_id."','".$file_name."')";
-                        }else{
-                            $filename=basename($file_name,$ext);
-                            $newFileName=$filename.time().".".$ext;
-                            move_uploaded_file($file_tmp, "../file_uploads/tickets_media/".$newFileName);
-
-                            $submit_ticket_file = "INSERT INTO ticket_messages(ticket_message_id, `file`)values('".$message_inserted_id."','".$newFileName."')";
+                    // Attachments
+                    if ($message_inserted_id && isset($_FILES['files']) && is_array($_FILES['files']['tmp_name'] ?? null)) {
+                        $allowed = ["jpeg","jpg","png","gif","pdf","doc","docx","txt","heif","webp","svg","mp4","mov","xls","csv"];
+                        $uploadDir = __DIR__ . '/../../file_uploads/tickets_media';
+                        if (!is_dir($uploadDir)) {
+                            @mkdir($uploadDir, 0755, true);
                         }
 
-                        $post_stf = mysqli_query($con, $submit_ticket_file);
+                        $file_stmt = $con->prepare("INSERT INTO ticket_media(ticket_message_id, `file`) VALUES(?,?)");
+                        foreach ($_FILES['files']['tmp_name'] as $key => $tmp_name) {
+                            $err = $_FILES['files']['error'][$key] ?? UPLOAD_ERR_NO_FILE;
+                            if ($err !== UPLOAD_ERR_OK) {
+                                continue;
+                            }
+
+                            $orig_name = (string)($_FILES['files']['name'][$key] ?? '');
+                            $ext = strtolower(pathinfo($orig_name, PATHINFO_EXTENSION));
+                            if ($ext === '' || !in_array($ext, $allowed, true)) {
+                                continue;
+                            }
+
+                            $safeName = 't_' . bin2hex(random_bytes(8)) . '.' . $ext;
+                            $dest = $uploadDir . '/' . $safeName;
+                            if (@move_uploaded_file($tmp_name, $dest)) {
+                                if ($file_stmt) {
+                                    $file_stmt->bind_param('is', $message_inserted_id, $safeName);
+                                    $file_stmt->execute();
+                                }
+                            }
+                        }
+                        if ($file_stmt) {
+                            $file_stmt->close();
+                        }
                     }
+
+                    $_SESSION['response'] = 'success';
+                    $_SESSION['message'] = 'Request created successfully.';
+                    $_SESSION['expire'] = time() + 5;
+                    echo "<meta http-equiv='refresh' content='1; url=requests.php' >";
+                } else {
+                    $_SESSION['response'] = 'error';
+                    $_SESSION['message'] = 'Process failed. Try again later or contact tech support.';
+                    $_SESSION['expire'] = time() + 10;
                 }
             }
-            
-            //send ticket message via email
-            
-            $response = "success";
-            $message = "Request created successfully.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 5;
-            $_SESSION['expire'] = time() + $res_sess_duration;
-
-            // echo "<script>window.location='manage-request.php?id=".$inserted_id."';</script>";	
-            echo "<meta http-equiv='refresh' content='3; url=requests.php' >";
-        } else {
-            $response = "error";
-            $message = "Process failed. Try again later or contact tech support.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
         }
     }
     
     //submit ticket reply
     if(isset($_POST['submit_ticket_reply'])){	
-        $ticket_message = $_POST['message'];
-        $complaint_id = $_POST['complaint_id'];
-        $ticket_id =$_POST['ticket_id'];
-        $sender = $_POST['sender']; //"admin"
-        $uploader =$_POST['uploader'];
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '');
+
+        $ticket_message = trim((string)($_POST['message'] ?? ''));
+        $ticket_id = filter_var($_POST['ticket_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $sender = 'landlord';
         $date_time = date("Y-m-d H:i:s");
 
-        if(!empty($ticket_message)){
-            $submit_ticket_message = "INSERT INTO ticket_messages(`date`, complaint_id, message, sender, admin_id)values('".$date_time."','".$complaint_id."','".mysqli_real_escape_string($con, $ticket_message)."','".$sender."',NULLIF('".$uploader."', ''))";
-            $post_stm = mysqli_query($con, $submit_ticket_message);
+        if(!$ticket_id){
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Invalid conversation.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='requests.php';</script>";
+            exit;
+        }
+
+        // Enforce ownership and load complaint_id from DB
+        $complaint_id = '';
+        $owner_stmt = $con->prepare("SELECT complaint_id FROM tickets WHERE id=? AND person_id=? AND target='landlords' LIMIT 1");
+        if ($owner_stmt) {
+            $person_id = (int)$this_landlord;
+            $owner_stmt->bind_param('ii', $ticket_id, $person_id);
+            $owner_stmt->execute();
+            $owner_res = $owner_stmt->get_result();
+            $owner_row = $owner_res ? $owner_res->fetch_assoc() : null;
+            $complaint_id = (string)($owner_row['complaint_id'] ?? '');
+            $owner_stmt->close();
+        }
+
+        if($complaint_id === ''){
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Conversation not found or access denied.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='requests.php';</script>";
+            exit;
+        }
+
+        if($ticket_message !== ''){
+            $stmt = $con->prepare("INSERT INTO ticket_messages(`date`, complaint_id, message, sender, admin_id) VALUES(?,?,?,?,NULL)");
+            $post_stm = false;
+            if ($stmt) {
+                $stmt->bind_param('ssss', $date_time, $complaint_id, $ticket_message, $sender);
+                $post_stm = $stmt->execute();
+                $message_inserted_id = $stmt->insert_id;
+                $stmt->close();
+            }
                                     
             if ($post_stm) {
-                $message_inserted_id = mysqli_insert_id($con);
-                $extension=array("jpeg","jpg","png","gif","pdf","doc","docx","txt","heif","webp","svg","mp4","mov","xls","csv");
+                if (isset($_FILES['files']) && is_array($_FILES['files']['tmp_name'] ?? null)) {
+                    $allowed = ["jpeg","jpg","png","gif","pdf","doc","docx","txt","heif","webp","svg","mp4","mov","xls","csv"];
+                    $uploadDir = __DIR__ . '/../../file_uploads/tickets_media';
+                    if (!is_dir($uploadDir)) {
+                        @mkdir($uploadDir, 0755, true);
+                    }
 
-                foreach($_FILES["files"]["tmp_name"] as $key=>$tmp_name) {
-                    $file_name=$_FILES["files"]["name"][$key];
-                    $file_tmp=$_FILES["files"]["tmp_name"][$key];
-                    $ext=pathinfo($file_name,PATHINFO_EXTENSION);
-
-                    if(in_array($ext,$extension)) {
-                        if(!file_exists("../file_uploads/tickets_media/".$file_name)) {
-                            move_uploaded_file($file_tmp, "../file_uploads/tickets_media/".$file_name);
-
-                            $submit_ticket_file = "INSERT INTO ticket_media(ticket_message_id, `file`)values('".$message_inserted_id."','".$file_name."')";
-                        }else{
-                            $filename=basename($file_name,$ext);
-                            $newFileName=$filename.time().".".$ext;
-                            move_uploaded_file($file_tmp, "../file_uploads/tickets_media/".$newFileName);
-
-                            $submit_ticket_file = "INSERT INTO ticket_messages(ticket_message_id, `file`)values('".$message_inserted_id."','".$newFileName."')";
+                    $file_stmt = $con->prepare("INSERT INTO ticket_media(ticket_message_id, `file`) VALUES(?,?)");
+                    foreach ($_FILES['files']['tmp_name'] as $key => $tmp_name) {
+                        $err = $_FILES['files']['error'][$key] ?? UPLOAD_ERR_NO_FILE;
+                        if ($err !== UPLOAD_ERR_OK) {
+                            continue;
                         }
 
-                        $post_stf = mysqli_query($con, $submit_ticket_file);
+                        $orig_name = (string)($_FILES['files']['name'][$key] ?? '');
+                        $ext = strtolower(pathinfo($orig_name, PATHINFO_EXTENSION));
+                        if ($ext === '' || !in_array($ext, $allowed, true)) {
+                            continue;
+                        }
+
+                        $safeName = 't_' . bin2hex(random_bytes(8)) . '.' . $ext;
+                        $dest = $uploadDir . '/' . $safeName;
+                        if (@move_uploaded_file($tmp_name, $dest)) {
+                            if ($file_stmt) {
+                                $file_stmt->bind_param('is', $message_inserted_id, $safeName);
+                                $file_stmt->execute();
+                            }
+                        }
+                    }
+                    if ($file_stmt) {
+                        $file_stmt->close();
                     }
                 }
 
-                $response = "success";
-                $message = "Response sent successfully.";
-            
-                $_SESSION['response'] = $response;
-                $_SESSION['message'] = $message;
-            
-                $res_sess_duration = 5;
-                $_SESSION['expire'] = time() + $res_sess_duration;
+                $_SESSION['response'] = 'success';
+                $_SESSION['message'] = 'Response sent successfully.';
+                $_SESSION['expire'] = time() + 5;
 
                 echo "<script>window.location='manage-request.php?id=".$ticket_id."';</script>";	
             } else {
-                $response = "error";
-                $message = "Something went wrong. Try again later or contact tech support.";
-            
-                $_SESSION['response'] = $response;
-                $_SESSION['message'] = $message;
-            
-                $res_sess_duration = 10;
-                $_SESSION['expire'] = time() + $res_sess_duration;
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Something went wrong. Try again later or contact tech support.';
+                $_SESSION['expire'] = time() + 10;
             }
         }else{
-            $response = "error";
-            $message = "Message body empty! Please type a response.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Message body empty! Please type a response.';
+            $_SESSION['expire'] = time() + 10;
         }
     }
 
@@ -646,38 +719,78 @@
 
     //nested routes
     if(isset($_GET['action'])){
-        $target = $_GET['action'];
-        // $target_id = $_GET['id'];
+        $target = (string)($_GET['action'] ?? '');
 
         //delete Listing
         if($target == "delete-listing"){
-            $target_id = $_GET['id'];
-
-            //delete listing from DB
-            $delete_listing = "delete from listings where id='".$target_id."'";
-            $run_dl = mysqli_query($con, $delete_listing);
-
-            //other related delete actions
-            $get_listing_media="SELECT * FROM listing_media where listing_id='".$target_id."'";
-            $glm_result=mysqli_query($con, $get_listing_media);
-            while($row = $glm_result->fetch_assoc()){
-                $tlm_id=$row['id'];
-                $tlm_file_name=$row['file_name'];
-
-                $dir = "../file_uploads/listings_media";    
-                $dirHandle = opendir($dir);    
-                while ($file = readdir($dirHandle)) {    
-                    if($file==$tlm_file_name) {
-                        unlink($dir."/".$file);
-                    }
-                }    
-                closedir($dirHandle);
-
-                $delete_lm = "delete from listing_media where id='".$tlm_id."'";
-                $run_dlm = mysqli_query($con, $delete_lm);
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid delete request.');
+            $target_id = (int)($_GET['id'] ?? 0);
+            if ($target_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid listing id.';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='manage-listings.php';</script>";
+                exit;
             }
 
-            if($run_dl){
+            // Ownership check: listing must belong to a property owned by this landlord
+            $auth_stmt = $con->prepare("SELECT l.id FROM listings l JOIN properties p ON p.id=l.property_id WHERE l.id=? AND p.landlord_id=? LIMIT 1");
+            if (!$auth_stmt) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Unable to process request.';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='manage-listings.php';</script>";
+                exit;
+            }
+            $auth_stmt->bind_param('ii', $target_id, $this_landlord);
+            $auth_stmt->execute();
+            $auth_res = $auth_stmt->get_result();
+            $allowed = ($auth_res && $auth_res->num_rows === 1);
+            $auth_stmt->close();
+            if (!$allowed) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Access denied.';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='manage-listings.php';</script>";
+                exit;
+            }
+
+            // Delete related media (db + files)
+            $media_stmt = $con->prepare("SELECT id, file_name FROM listing_media WHERE listing_id=?");
+            if ($media_stmt) {
+                $media_stmt->bind_param('i', $target_id);
+                $media_stmt->execute();
+                $media_res = $media_stmt->get_result();
+                $del_media_stmt = $con->prepare("DELETE FROM listing_media WHERE id=?");
+                while ($media_res && ($mrow = $media_res->fetch_assoc())) {
+                    $tlm_id = (int)$mrow['id'];
+                    $tlm_file_name = (string)($mrow['file_name'] ?? '');
+                    $safe_name = $tlm_file_name !== '' ? basename($tlm_file_name) : '';
+                    $file_path = $safe_name !== '' ? ("../file_uploads/listings_media/" . $safe_name) : '';
+                    if ($file_path !== '' && is_file($file_path)) {
+                        @unlink($file_path);
+                    }
+                    if ($del_media_stmt && $tlm_id > 0) {
+                        $del_media_stmt->bind_param('i', $tlm_id);
+                        $del_media_stmt->execute();
+                    }
+                }
+                if ($del_media_stmt) {
+                    $del_media_stmt->close();
+                }
+                $media_stmt->close();
+            }
+
+            // Delete listing
+            $run_ok = false;
+            $del_listing_stmt = $con->prepare("DELETE FROM listings WHERE id=? LIMIT 1");
+            if ($del_listing_stmt) {
+                $del_listing_stmt->bind_param('i', $target_id);
+                $run_ok = $del_listing_stmt->execute();
+                $del_listing_stmt->close();
+            }
+
+            if($run_ok){
                 $response = "success";
                 $message = "Listing data deleted.";
             
@@ -702,29 +815,54 @@
 
         //delete Listing Media
         if($target == "delete-media"){
-            $target_id = $_GET['id'];
-
-            //other related delete actions
-            $get_listing_media="SELECT * FROM listing_media where id='".$target_id."'";
-            $glm_result=mysqli_query($con, $get_listing_media);
-            while($row = $glm_result->fetch_assoc()){
-                $tlm_listing_id=$row['listing_id'];
-                $tlm_file_name=$row['file_name'];
-
-                $dir = "../file_uploads/listings_media";    
-                $dirHandle = opendir($dir);    
-                while ($file = readdir($dirHandle)) {    
-                    if($file==$tlm_file_name) {
-                        unlink($dir."/".$file);
-                    }
-                }    
-                closedir($dirHandle);
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid delete request.');
+            $target_id = (int)($_GET['id'] ?? 0);
+            if ($target_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Invalid media id.';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='manage-listings.php';</script>";
+                exit;
             }
 
-            $delete_lm = "delete from listing_media where id='".$target_id."'";
-            $run_dlm = mysqli_query($con, $delete_lm);
+            // Load + authorize media via property landlord ownership
+            $tlm_listing_id = 0;
+            $tlm_file_name = '';
+            $load_stmt = $con->prepare("SELECT lm.listing_id, lm.file_name FROM listing_media lm JOIN listings l ON l.id=lm.listing_id JOIN properties p ON p.id=l.property_id WHERE lm.id=? AND p.landlord_id=? LIMIT 1");
+            if ($load_stmt) {
+                $load_stmt->bind_param('ii', $target_id, $this_landlord);
+                $load_stmt->execute();
+                $load_res = $load_stmt->get_result();
+                $load_row = $load_res ? $load_res->fetch_assoc() : null;
+                $load_stmt->close();
+                if ($load_row) {
+                    $tlm_listing_id = (int)$load_row['listing_id'];
+                    $tlm_file_name = (string)($load_row['file_name'] ?? '');
+                }
+            }
+            if ($tlm_listing_id <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Access denied.';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='manage-listings.php';</script>";
+                exit;
+            }
 
-            if($run_dlm){
+            $safe_name = $tlm_file_name !== '' ? basename($tlm_file_name) : '';
+            $file_path = $safe_name !== '' ? ("../file_uploads/listings_media/" . $safe_name) : '';
+            if ($file_path !== '' && is_file($file_path)) {
+                @unlink($file_path);
+            }
+
+            $run_ok = false;
+            $delete_stmt = $con->prepare("DELETE FROM listing_media WHERE id=? LIMIT 1");
+            if ($delete_stmt) {
+                $delete_stmt->bind_param('i', $target_id);
+                $run_ok = $delete_stmt->execute();
+                $delete_stmt->close();
+            }
+
+            if($run_ok){
                 $response = "success";
                 $message = "Listing media deleted.";
             

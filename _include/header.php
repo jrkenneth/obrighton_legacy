@@ -331,6 +331,16 @@ if(isset($_GET['q'])){
 							<span class="nav-text">Manage Tenants</span>
 						</a>
 					</li>
+					<li><a href="all-payments.php" class="" aria-expanded="false">
+						<div class="menu-icon">
+							<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#888888" stroke-width="2"/>
+								<path d="M12 6V12L16 14" stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>	
+							<span class="nav-text">All Payment History</span>
+						</a>
+					</li>
 					<li><a href="manage-artisans.php" class="" aria-expanded="false">
 						<div class="menu-icon">
 							<svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">

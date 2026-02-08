@@ -497,7 +497,7 @@
                 $edit_link = "";
             }else if($_status == "1"){
                 $listing_link = "
-                    <a href='?action=update-listing-status&id=".$_id."' class='btn btn-success btn-sm ms-2'>Mark Rent/Purchase as Complete &nbsp; <i class='fa fa-check-circle'></i></a>
+                    <a href='?action=update-listing-status&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='btn btn-success btn-sm ms-2'>Mark Rent/Purchase as Complete &nbsp; <i class='fa fa-check-circle'></i></a>
                 ";
                 $edit_link = "
                     <a href='?target=update-listing&id=".$_id."&view_target=listings&source=manage-listings' title='Edit Listing' class='btn btn-secondary btn-sm ms-2'>Edit Listing &nbsp; <i class='fa fa-pencil'></i></a>
@@ -509,14 +509,14 @@
                     <span class='badge badge-danger light border-0'>Hidden</span>
                 ";
                 $visibility_link = "
-                    <a href='?action=show-listing&id=".$_id."' class='btn btn-primary btn-sm ms-2'>Show Listing on Website &nbsp; <i class='fa fa-eye'></i></a>
+                    <a href='?action=show-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='btn btn-primary btn-sm ms-2'>Show Listing on Website &nbsp; <i class='fa fa-eye'></i></a>
                 ";
             }else if($_visibility_status == "1"){
                 $visibility_status = "
                     <span class='badge badge-success light border-0'>Visible</span>
                 ";
                 $visibility_link = "
-                    <a href='?action=hide-listing&id=".$_id."' class='btn btn-danger btn-sm ms-2'>Hide Listing on Website &nbsp; <i class='fa fa-eye-slash'></i></a>
+                    <a href='?action=hide-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='btn btn-danger btn-sm ms-2'>Hide Listing on Website &nbsp; <i class='fa fa-eye-slash'></i></a>
                 ";
             }
 
@@ -1150,14 +1150,14 @@
                                                     <span class='badge badge-danger light border-0'>Hidden</span>
                                                 ";
                                                 $visibility_link = "
-                                                    <a href='?action=show-listing&id=".$_id."' class='dropdown-item'>Show Listing</a>
+                                                    <a href='?action=show-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='dropdown-item'>Show Listing</a>
                                                 ";
                                             }else if($_visibility_status == "1"){
                                                 $visibility_status = "
                                                     <span class='badge badge-success light border-0'>Visible</span>
                                                 ";
                                                 $visibility_link = "
-                                                    <a href='?action=hide-listing&id=".$_id."' class='dropdown-item'>Hide Listing</a>
+                                                    <a href='?action=hide-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='dropdown-item'>Hide Listing</a>
                                                 ";
                                             }
 
@@ -1394,7 +1394,7 @@
                     <span class='badge badge-danger light border-0'>Occupied</span>
                 ";
 
-                $os_link = "<a href='?action=tenant-relocated&id=".$_id."' class='btn btn-secondary btn-sm ms-2'>Update to Relocated &nbsp; <i class='fa fa-repeat'></i></a>";
+                $os_link = "<a href='?action=tenant-relocated&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='btn btn-secondary btn-sm ms-2'>Update to Relocated &nbsp; <i class='fa fa-repeat'></i></a>";
 
                 if($_notification_status == "0"){
                     $this_ns = "
@@ -1402,7 +1402,7 @@
                     ";
 
                     $ns_link = "
-                        <a href='?action=enable-rent-notifications&id=".$_id."' class='btn btn-success btn-sm ms-2'>Enable Notifications &nbsp; <i class='fa fa-check-circle'></i></a>
+                        <a href='?action=enable-rent-notifications&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='btn btn-success btn-sm ms-2'>Enable Notifications &nbsp; <i class='fa fa-check-circle'></i></a>
                     ";
                 }else if($_notification_status == "1"){
                     $this_ns = "
@@ -1410,7 +1410,7 @@
                     ";
 
                     $ns_link = "
-                        <a href='?action=disable-rent-notifications&id=".$_id."' class='btn btn-danger btn-sm ms-2'>Disable Notifications &nbsp; <i class='fa fa-times-circle'></i></a>
+                        <a href='?action=disable-rent-notifications&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='btn btn-danger btn-sm ms-2'>Disable Notifications &nbsp; <i class='fa fa-times-circle'></i></a>
                     ";
                 }
             }else if($_occupant_status == "0"){
@@ -1531,10 +1531,12 @@
                                     <div style='margin: 15px;'></div>
                                     ".$os_link."
                                 </div>
+                                <!--
                                 <div ".$agent_hidden.">
                                     <div style='margin: 15px;'></div>
                                     ".$ns_link."
                                 </div>
+                                -->
                             "; ?>
                         </div>
                     </div>
@@ -1913,7 +1915,7 @@
 
 
 <?php
-    }elseif($target_name == "artisans"){
+    }elseif($target_name == "artisans" || $target_name == "artisan"){
         $artisan = $target_id;
 
         $retrieve_all_artisans = "select * from artisans where id='".$artisan."'";

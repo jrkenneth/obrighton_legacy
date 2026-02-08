@@ -1,22 +1,32 @@
 <?php include("_includes/header.php");
 
-if(isset($_GET['type'])){
-  $retrieve_ticket_type = "select * from ticket_type where id='".$_GET['type']."'";
-  $rtt_result = $con->query($retrieve_ticket_type);
-  while($row = $rtt_result->fetch_assoc())
-  {
-    $_ticket_type=$row['type'];
+$type_id = filter_input(INPUT_GET, 'type', FILTER_VALIDATE_INT, [
+  'options' => ['min_range' => 1]
+]);
+
+$page_header = "My Conversations";
+$table_title = "Conversation";
+$clear_filter_btn = "";
+
+$_ticket_type = null;
+if ($type_id) {
+  $stmt = $con->prepare("SELECT type FROM ticket_type WHERE id=? LIMIT 1");
+  if ($stmt) {
+    $stmt->bind_param('i', $type_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_assoc() : null;
+    $stmt->close();
+    $_ticket_type = $row['type'] ?? null;
   }
 
-  $page_header = $_ticket_type;
-  $table_title = $_ticket_type;
-  $clear_filter_btn = "<a href='requests.php' class='btn btn-danger'>Clear Filter</a>";
-  $query_append = "type='".$_GET['type']."' and";
-}else{
-  $page_header = "My Conversations";
-  $table_title = "Conversation";
-  $clear_filter_btn = "";
-  $query_append = "";
+  if (!empty($_ticket_type)) {
+    $page_header = $_ticket_type;
+    $table_title = $_ticket_type;
+    $clear_filter_btn = "<a href='requests.php' class='btn btn-danger'>Clear Filter</a>";
+  } else {
+    $type_id = null;
+  }
 } 
 ?>
 
@@ -60,24 +70,39 @@ if(isset($_GET['type'])){
                     </thead>
                     <tbody>
                       <?php
-                        $retrieve_all_tickets = "select * from tickets where ".$query_append." person_id='".$this_tenant."' and target='tenants' order by date_opened desc";
-                        $rat_result = $con->query($retrieve_all_tickets);
-                        while($row = $rat_result->fetch_assoc())
-                        {
-                          $_id=$row['id'];
-                          $_complaint_id=$row['complaint_id'];
-                          $_title=$row['title'];
-													$_type=$row['type'];
-                          $_date_opened=$row['date_opened'];
-                          $_date_closed=$row['date_closed'];
-                          $_status=$row['status'];
+                        $this_tenant_id = (int)$this_tenant;
+                        if ($type_id) {
+                          $stmt = $con->prepare("SELECT t.*, tt.type AS ticket_type FROM tickets t LEFT JOIN ticket_type tt ON tt.id=t.type WHERE t.type=? AND t.person_id=? AND t.target='tenants' ORDER BY t.date_opened DESC");
+                          if ($stmt) {
+                            $stmt->bind_param('ii', $type_id, $this_tenant_id);
+                          }
+                        } else {
+                          $stmt = $con->prepare("SELECT t.*, tt.type AS ticket_type FROM tickets t LEFT JOIN ticket_type tt ON tt.id=t.type WHERE t.person_id=? AND t.target='tenants' ORDER BY t.date_opened DESC");
+                          if ($stmt) {
+                            $stmt->bind_param('i', $this_tenant_id);
+                          }
+                        }
 
-													$retrieve_ticket_type = "select * from ticket_type where id='".$_type."'";
-													$rtt_result = $con->query($retrieve_ticket_type);
-													while($row = $rtt_result->fetch_assoc())
-													{
-														$_ticket_type=$row['type'];
-													}
+                        $unread_stmt = $con->prepare("SELECT COUNT(*) AS c FROM ticket_messages WHERE complaint_id=? AND sender!='tenant' AND status='0'");
+
+                        $rat_result = null;
+                        if ($stmt) {
+                          $stmt->execute();
+                          $rat_result = $stmt->get_result();
+                        }
+
+                        if ($rat_result) {
+                          while($row = $rat_result->fetch_assoc())
+                          {
+                            $_id = (int)($row['id'] ?? 0);
+                            $_complaint_id = (string)($row['complaint_id'] ?? '');
+                            $_title = (string)($row['title'] ?? '');
+							$_type = (int)($row['type'] ?? 0);
+                            $_date_opened = (string)($row['date_opened'] ?? '');
+                            $_date_closed = (string)($row['date_closed'] ?? '');
+                            $_status = (string)($row['status'] ?? '0');
+
+							$_ticket_type = (string)($row['ticket_type'] ?? '');
 
                           if(!empty($_date_closed)){
                             $__date_closed = date("jS M, Y h:ia", strtotime($_date_closed));
@@ -88,22 +113,29 @@ if(isset($_GET['type'])){
                           $__date_created = date("jS M, Y h:ia", strtotime($_date_opened));
 
                           if($_status == "0"){
-                            $unread_messages_count_query="SELECT * FROM ticket_messages where complaint_id='".$_complaint_id."' and sender!='tenant' and status='0'";
-                            $run_umcq=mysqli_query($con, $unread_messages_count_query);
-                            $unread_messages_count = mysqli_num_rows($run_umcq);
-
-                            if($unread_messages_count > 0){
-                              $umc_value = "class='ud-btn btn-dark'>Reply (".$unread_messages_count." new)";
-                            }else{
-                              $umc_value = "class='ud-btn btn-dark'>Send a message";
+                            $unread_messages_count = 0;
+                            if ($unread_stmt && $_complaint_id !== '') {
+                              $unread_stmt->bind_param('s', $_complaint_id);
+                              $unread_stmt->execute();
+                              $unread_res = $unread_stmt->get_result();
+                              $unread_row = $unread_res ? $unread_res->fetch_assoc() : null;
+                              $unread_messages_count = (int)($unread_row['c'] ?? 0);
                             }
+
+                            $btn_text = ($unread_messages_count > 0)
+                              ? ("Reply (".$unread_messages_count." new)")
+                              : "Send a message";
                             
                             $badge = "<span class='badge bg-success'>Open</span>";
-                            $manage_btn = "<a class='btn btn-primary' style='width: 100%;' href='manage-request.php?id=".$_id."'".$umc_value."</a>";
+                            $manage_btn = "<a class='btn btn-primary' style='width: 100%;' href='manage-request.php?id=".$_id."'>".htmlspecialchars($btn_text, ENT_QUOTES, 'UTF-8')."</a>";
                           }else if($_status == "1"){
                             $badge = "<span class='badge bg-danger'>Closed</span>";
-                            $manage_btn = "<a class='btn btn-secondary' style='width: 100%;' href='manage-request.php?id=".$_id."' class='ud-btn btn-white2'>View Conversation</a>";
+                            $manage_btn = "<a class='btn btn-secondary' style='width: 100%;' href='manage-request.php?id=".$_id."'>View Conversation</a>";
                           }
+
+                          $safe_title = htmlspecialchars($_title, ENT_QUOTES, 'UTF-8');
+                          $safe_ticket_type = htmlspecialchars($_ticket_type, ENT_QUOTES, 'UTF-8');
+                          $safe_complaint_id = htmlspecialchars($_complaint_id, ENT_QUOTES, 'UTF-8');
 
                           echo "
                             <tr>
@@ -113,9 +145,9 @@ if(isset($_GET['type'])){
                                     <i class='flaticon-chat-1 mr10' style='font-size: 30px;'></i>
                                   </div>
                                   <div class='col-xl-9 col-md-7 col-sm-6 col-9' style='float: left;'>
-                                    <a href='manage-request.php?id=".$_id."' style='color: #327da8; font-weight: bold;'>".$_title."</a><br>
-                                    <span class='badge bg-secondary'>".$_ticket_type."</span> &nbsp; ".$badge."<br>
-                                    <small>Request ID: <b>".$_complaint_id."</b> &nbsp; Created on: <b>".$__date_created."</b></small>
+                                    <a href='manage-request.php?id=".$_id."' style='color: #327da8; font-weight: bold;'>".$safe_title."</a><br>
+                                    <span class='badge bg-secondary'>".$safe_ticket_type."</span> &nbsp; ".$badge."<br>
+                                    <small>Request ID: <b>".$safe_complaint_id."</b> &nbsp; Created on: <b>".$__date_created."</b></small>
                                   </div>
                                   <div class='col-xl-2 col-md-3 col-sm-4 col-12' style='float: left; padding-top: 7px; text-align: right;'>
                                     ".$manage_btn."
@@ -124,6 +156,14 @@ if(isset($_GET['type'])){
                               </td>
                             </tr>
                           ";
+                          }
+                        }
+
+                        if ($unread_stmt) {
+                          $unread_stmt->close();
+                        }
+                        if (isset($stmt) && $stmt) {
+                          $stmt->close();
                         }
                       ?>
                     </tbody>

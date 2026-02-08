@@ -1,50 +1,74 @@
 <?php
-  
-  include("../_include/dbconnect.php");
+  include("_includes/header.php"); 
   date_default_timezone_set("Africa/Lagos");
 
-  if(isset($_GET['id'])){
-    $ticket_id = $_GET['id'];
+  $ticket_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT, [
+    'options' => ['min_range' => 1]
+  ]);
 
-    $retrieve_this_ticket = "select * from tickets where id='".$ticket_id."'";
-    $rtt_result = $con->query($retrieve_this_ticket);
-    while($row = $rtt_result->fetch_assoc())
-    {
-      $_complaint_id=$row['complaint_id'];
-      $_title=$row['title'];
-      $person_id=$row['person_id'];
-      $_target=$row['target'];
-      $_date_opened=$row['date_opened'];
-      $_date_closed=$row['date_closed'];
-      $_status=$row['status'];
+  $_complaint_id = '';
+  $_title = '';
+  $_date_closed = '';
+  $_status = '0';
+  $__date_closed = '';
+  $reply_form_visibility = "display: none;";
 
-      if(!empty($_date_closed)){
-        $__date_closed = "
-          <tr>
-            <td style='font-weight: bold;'>
-              Closed On:
-            </td>
-            <td>
-              ".date("jS M, Y h:ia", strtotime($_date_closed))."
-            </td>
-          </tr>
-        ";
-      }else{
-        $__date_closed = "";
-      }
+  if (!$ticket_id) {
+    $_SESSION['response'] = 'error';
+    $_SESSION['message'] = 'Invalid conversation link.';
+    $_SESSION['expire'] = time() + 10;
+    echo "<script>window.location='requests.php';</script>";
+    exit;
+  }
 
-      if($_status == "0"){
-        $reply_form_visibility = "display: block;";
-      }else if($_status == "1"){
-        $reply_form_visibility = "display: none;";
-      }
+  $this_tenant_id = (int)$this_tenant;
+  $stmt = $con->prepare("SELECT complaint_id, title, date_closed, status FROM tickets WHERE id=? AND person_id=? AND target='tenants' LIMIT 1");
+  if ($stmt) {
+    $stmt->bind_param('ii', $ticket_id, $this_tenant_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_assoc() : null;
+    $stmt->close();
+
+    if ($row) {
+      $_complaint_id = (string)($row['complaint_id'] ?? '');
+      $_title = (string)($row['title'] ?? '');
+      $_date_closed = (string)($row['date_closed'] ?? '');
+      $_status = (string)($row['status'] ?? '0');
     }
   }
 
-  include("_includes/header.php"); 
+  if ($_complaint_id === '') {
+    $_SESSION['response'] = 'error';
+    $_SESSION['message'] = 'Conversation not found or access denied.';
+    $_SESSION['expire'] = time() + 10;
+    echo "<script>window.location='requests.php';</script>";
+    exit;
+  }
 
-  $mark_tickets_as_read = "update ticket_messages set status='1' where complaint_id='".$_complaint_id."' and sender!='tenant'";
-  $post_mtar = mysqli_query($con, $mark_tickets_as_read);
+  if (!empty($_date_closed)) {
+    $__date_closed = "
+      <tr>
+        <td style='font-weight: bold;'>
+          Closed On:
+        </td>
+        <td>
+          ".date("jS M, Y h:ia", strtotime($_date_closed))."
+        </td>
+      </tr>
+    ";
+  }
+
+  if ($_status === '0') {
+    $reply_form_visibility = "display: block;";
+  }
+
+  $mark_stmt = $con->prepare("UPDATE ticket_messages SET status='1' WHERE complaint_id=? AND sender!='tenant'");
+  if ($mark_stmt) {
+    $mark_stmt->bind_param('s', $_complaint_id);
+    $mark_stmt->execute();
+    $mark_stmt->close();
+  }
   
   if(isset($_SESSION['expire'])){
     if(time() > $_SESSION['expire'])
@@ -96,7 +120,7 @@
 
             <div class="col-lg-12">
               <div class="dashboard_title_area">
-                <div style="width: 70%; float: left;"><h4> <?php echo $_title; ?></h4></div>
+                <div style="width: 70%; float: left;"><h4> <?php echo htmlspecialchars($_title, ENT_QUOTES, 'UTF-8'); ?></h4></div>
                 <div style="width: 30%; float: left; text-align: right;">
                   <a href="requests.php" class="btn btn-secondary" style="font-weight: bold; float: right;"><i class="fa fa-reply"></i> Back</a>
                 </div>
@@ -111,42 +135,62 @@
                     <table id="" class="table">
                       <tbody>
                         <?php
-                          $retrieve_ticket_messages = "select * from ticket_messages where complaint_id='".$_complaint_id."' order by date asc";
-                          $rtm_result = $con->query($retrieve_ticket_messages);
-                          while($row = $rtm_result->fetch_assoc())
-                          {
-                            $_id=$row['id'];
-                            $_date=$row['date'];
-                            $_message=$row['message'];
-                            $_sender=$row['sender'];
-                            $_admin_id=$row['admin_id'];
-                            $_status=$row['status'];
+                          $msg_stmt = $con->prepare("SELECT id, date, message, sender, admin_id, status FROM ticket_messages WHERE complaint_id=? ORDER BY date ASC");
+                          $media_stmt = $con->prepare("SELECT file FROM ticket_media WHERE ticket_message_id=? ORDER BY id ASC");
+                          $admin_stmt = $con->prepare("SELECT first_name, last_name FROM users WHERE id=? LIMIT 1");
 
-                            $media_files=array();
+                          if ($msg_stmt) {
+                            $msg_stmt->bind_param('s', $_complaint_id);
+                            $msg_stmt->execute();
+                            $rtm_result = $msg_stmt->get_result();
+                          } else {
+                            $rtm_result = null;
+                          }
 
-                            $retrieve_ticket_file = "select * from ticket_media where ticket_message_id='".$_id."' order by id asc";
-                            $rtf_result = $con->query($retrieve_ticket_file);
-                            while($row = $rtf_result->fetch_assoc())
+                          if ($rtm_result) {
+                            while($row = $rtm_result->fetch_assoc())
                             {
-                              $_file=$row['file'];
+                              $_id = (int)($row['id'] ?? 0);
+                              $_date = (string)($row['date'] ?? '');
+                              $_message = (string)($row['message'] ?? '');
+                              $_sender = (string)($row['sender'] ?? '');
+                              $_admin_id = (int)($row['admin_id'] ?? 0);
+                              $_status = (string)($row['status'] ?? '0');
 
-                              array_push($media_files, $_file);
-                            }
-
-                            if($_sender == "admin"){
-                              $retrieve_this_user = "select * from users where id='".$_admin_id."'";
-                              $rtu_result = $con->query($retrieve_this_user);
-                              while($row = $rtu_result->fetch_assoc())
-                              {
-                                $_first_name=$row['first_name'];
-                                $_last_name=$row['last_name'];
-                                $_role_id=$row['role_id'];
+                              $media_files = array();
+                              if ($media_stmt && $_id > 0) {
+                                $media_stmt->bind_param('i', $_id);
+                                $media_stmt->execute();
+                                $rtf_result = $media_stmt->get_result();
+                                if ($rtf_result) {
+                                  while($frow = $rtf_result->fetch_assoc())
+                                  {
+                                    $_file = (string)($frow['file'] ?? '');
+                                    if ($_file !== '') {
+                                      $media_files[] = $_file;
+                                    }
+                                  }
+                                }
                               }
+
+                              $sender_ = 'Admin';
+                              if($_sender == "admin" && $admin_stmt && $_admin_id > 0){
+                                $admin_stmt->bind_param('i', $_admin_id);
+                                $admin_stmt->execute();
+                                $rtu_result = $admin_stmt->get_result();
+                                $urow = $rtu_result ? $rtu_result->fetch_assoc() : null;
+                                if ($urow) {
+                                  $_first_name = (string)($urow['first_name'] ?? '');
+                                  $_last_name = (string)($urow['last_name'] ?? '');
+                                  $sender_ = trim($_first_name.' '.$_last_name);
+                                  if ($sender_ === '') {
+                                    $sender_ = 'Admin';
+                                  }
+                                }
 
                               $orientation = "left";
                               $color = "color: black;";
                               $bg = "";
-                              $sender_ = $_first_name." ".$_last_name;
                             }else{
                               $orientation = "right";
                               $bg = "bg-dark";
@@ -164,6 +208,9 @@
                               ";
                             }
 
+                            $safe_message = nl2br(htmlspecialchars($_message, ENT_QUOTES, 'UTF-8'));
+                            $safe_sender = htmlspecialchars($sender_, ENT_QUOTES, 'UTF-8');
+
                             echo "
                               <tr>
                                 <td>
@@ -173,26 +220,28 @@
                               echo "
                                 <div class='col-xl-12 col-md-12 col-sm-12 col-12' style='float: left;'>
                                   <p style='margin: 0px; ".$color." text-align: ".$orientation.";'>
-                                    ".$_message."<hr>
+                                    ".$safe_message."<hr>
                                     ";
                                     $file_count = 1;
                                     foreach($media_files as $media_file) {
+                                      $safe_file = basename((string)$media_file);
+                                      $encoded_file = rawurlencode($safe_file);
                                       echo "
-                                        <a class='badge bg-secondary' style='color: white;' href='../file_uploads/tickets_media/".$media_file."' download>Download Attachment ".$file_count."</a>
+                                        <a class='badge bg-secondary' style='color: white;' href='../file_uploads/tickets_media/".$encoded_file."' download>Download Attachment ".$file_count."</a>
                                       ";
                                       $file_count++;
                                     }
                                     echo "
                                   </p>
-                                  <small style='".$color." float: ".$orientation."; font-style: italic;'>".$sender_." ~ ".date("l, jS M, Y h:ia", strtotime($_date))."</small>
+                                  <small style='".$color." float: ".$orientation."; font-style: italic;'>".$safe_sender." ~ ".date("l, jS M, Y h:ia", strtotime($_date))."</small>
                                 </div>
                               ";
                             }else{
                               echo "
                                 <div class='col-xl-12 col-md-12 col-sm-12 col-12' style='float: left;'>
-                                  <p style='margin: 0px; ".$color." text-align: ".$orientation.";'>".$_message."</p>
+                                  <p style='margin: 0px; ".$color." text-align: ".$orientation.";'>".$safe_message."</p>
 															    <hr>
-                                  <small style='".$color." float: ".$orientation."; font-style: italic;'>".$sender_." ~ ".date("l, jS M, Y h:ia", strtotime($_date))."</small>
+                                  <small style='".$color." float: ".$orientation."; font-style: italic;'>".$safe_sender." ~ ".date("l, jS M, Y h:ia", strtotime($_date))."</small>
                                 </div>
                               ";
                             }
@@ -201,6 +250,17 @@
                                 </td>
                               </tr>
                             "; 
+                            }
+                          }
+
+                          if ($msg_stmt) {
+                            $msg_stmt->close();
+                          }
+                          if ($media_stmt) {
+                            $media_stmt->close();
+                          }
+                          if ($admin_stmt) {
+                            $admin_stmt->close();
                           }
                         ?>
                       </tbody>
@@ -209,6 +269,7 @@
                   </div>
                   <div class="basic-form" style="margin-top: 10px; padding: 25px 10px 10px 10px; background: black; <?php echo $reply_form_visibility; ?>">
                     <form method="POST" enctype="multipart/form-data">
+                      <?php if (class_exists('CSRFProtection')) { CSRFProtection::tokenField(); } ?>
                       <div class="row">
                         <div class="col-xl-12 mb-3">
                           <textarea class="form-control" id="message" name="message" required placeholder="Type your message..."></textarea>

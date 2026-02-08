@@ -1,10 +1,22 @@
 <?php 
 	include("_includes/header.php"); 
 
-	if(isset($_GET['id'])){
-		$target_id = $_GET['id'];
-		$target_name = $_GET['view_target'];
+	function _vd_forbidden(string $msg = 'Access denied.', string $redirect = 'index.php'): void {
+		$_SESSION['response'] = 'error';
+		$_SESSION['message'] = $msg;
+		$_SESSION['expire'] = time() + 8;
+		echo "<script>window.location='{$redirect}';</script>";
+		exit;
 	}
+
+	$target_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+	$target_name = $_GET['view_target'] ?? '';
+	$allowed_targets = ['properties', 'tenants', 'payments', 'notifications', 'artisans'];
+
+	if (!$target_id || !in_array($target_name, $allowed_targets, true)) {
+		_vd_forbidden('Invalid request.');
+	}
+	$target_id = (int)$target_id;
 
 	if(isset($_SESSION['expire'])){
 		if(time() > $_SESSION['expire'])
@@ -54,8 +66,22 @@
 	
 	<?php
     if($target_name == "properties"){
-        $retrieve_all_properties = "select * from properties where id='".$target_id."'";
-        $rap_result = $con->query($retrieve_all_properties);
+		$my_property_id = isset($tu_property_id) ? (int)$tu_property_id : 0;
+		if ($my_property_id < 1 || $target_id !== $my_property_id) {
+			_vd_forbidden('Access denied.');
+		}
+
+		$prop_stmt = $con->prepare("SELECT * FROM properties WHERE id=? LIMIT 1");
+		if (!$prop_stmt) {
+			_vd_forbidden('Unable to load property.');
+		}
+		$prop_stmt->bind_param('i', $target_id);
+		$prop_stmt->execute();
+		$rap_result = $prop_stmt->get_result();
+		if (!$rap_result || $rap_result->num_rows < 1) {
+			$prop_stmt->close();
+			_vd_forbidden('Access denied.');
+		}
         while($row = $rap_result->fetch_assoc())
         {
             $_id=$row['id'];
@@ -194,6 +220,7 @@
                 $living_spaces = "<span class='badge bg-danger'>N/A</span>";
             }
         }
+		$prop_stmt->close();
 ?>
 		<div class="col-xxl-12">
 			<div class="dashboard_title_area">
@@ -281,8 +308,14 @@
 						<table id="customer-tbl" class="table shorting">
 							<tbody>
 							<?php
-								$retrieve_all_tenants = "select * from tenants where property_id='".$target_id."' order by first_name asc";
-								$rat_result = $con->query($retrieve_all_tenants);
+								$rat_stmt = $con->prepare("SELECT * FROM tenants WHERE id=? AND property_id=? ORDER BY first_name ASC");
+								if (!$rat_stmt) {
+									_vd_forbidden('Unable to load tenants.');
+								}
+								$my_tenant_id = (int)$this_tenant;
+								$rat_stmt->bind_param('ii', $my_tenant_id, $target_id);
+								$rat_stmt->execute();
+								$rat_result = $rat_stmt->get_result();
 								while($row = $rat_result->fetch_assoc())
 								{
 									$_id=$row['id'];
@@ -335,6 +368,7 @@
 										</tr>
 									";
 								}
+								$rat_stmt->close();
 							?>
 							</tbody>
 							
@@ -346,8 +380,22 @@
 	</div>
 <?php
     }elseif($target_name == "tenants"){
-        $retrieve_all_tenants = "select * from tenants where id='".$target_id."'";
-        $rat_result = $con->query($retrieve_all_tenants);
+		$my_tenant_id = (int)$this_tenant;
+		if ($target_id !== $my_tenant_id) {
+			_vd_forbidden('Access denied.');
+		}
+
+		$tenant_stmt = $con->prepare("SELECT * FROM tenants WHERE id=? LIMIT 1");
+		if (!$tenant_stmt) {
+			_vd_forbidden('Unable to load tenant.');
+		}
+		$tenant_stmt->bind_param('i', $target_id);
+		$tenant_stmt->execute();
+		$rat_result = $tenant_stmt->get_result();
+		if (!$rat_result || $rat_result->num_rows < 1) {
+			$tenant_stmt->close();
+			_vd_forbidden('Access denied.');
+		}
         while($row = $rat_result->fetch_assoc())
         {
             $_id=$row['id'];
@@ -367,33 +415,31 @@
             $_uploader_id=$row['uploader_id'];
             $_owner_id=$row['owner_id'];
 
-			$retrieve_last_payment = "select * from payment_history where tenant_id='".$target_id."' order by id desc limit 1,1";
-            $rlp_result = $con->query($retrieve_last_payment);
-            $last_payment_count = mysqli_num_rows($rlp_result);
+			$__last_pmt_date = "<span class='badge bg-danger'>N/A</span>";
+			$rlp_stmt = $con->prepare("SELECT payment_date FROM payment_history WHERE tenant_id=? ORDER BY id DESC LIMIT 1,1");
+			if ($rlp_stmt) {
+				$rlp_stmt->bind_param('i', $_id);
+				$rlp_stmt->execute();
+				$rlp_res = $rlp_stmt->get_result();
+				$rlp_row = $rlp_res ? $rlp_res->fetch_assoc() : null;
+				if ($rlp_row && !empty($rlp_row['payment_date'])) {
+					$__last_pmt_date = date("jS M, Y", strtotime($rlp_row['payment_date']));
+				}
+				$rlp_stmt->close();
+			}
 
-            if($last_payment_count > 0){
-                while($row = $rlp_result->fetch_assoc())
-                {
-                    $_paymentdate=$row['payment_date'];
-                    $__last_pmt_date = date("jS M, Y", strtotime($_paymentdate));
-                }
-            }else{
-                $__last_pmt_date = "<span class='badge bg-danger'>N/A</span>";
-            }
-
-            $retrieve_next_payment = "select * from payment_history where tenant_id='".$target_id."' and payment_date IS NULL order by id desc limit 0,1";
-            $rnp_result = $con->query($retrieve_next_payment);
-            $next_payment_count = mysqli_num_rows($rnp_result);
-
-            if($next_payment_count > 0){
-                while($row = $rnp_result->fetch_assoc())
-                {
-                    $_duedate=$row['due_date'];
-                    $__next_pmt_date = date("jS M, Y", strtotime($_duedate));
-                }
-            }else{
-                $__next_pmt_date = "<span class='badge bg-danger'>N/A</span>";
-            }
+			$__next_pmt_date = "<span class='badge bg-danger'>N/A</span>";
+			$rnp_stmt = $con->prepare("SELECT due_date FROM payment_history WHERE tenant_id=? AND payment_date IS NULL ORDER BY id DESC LIMIT 0,1");
+			if ($rnp_stmt) {
+				$rnp_stmt->bind_param('i', $_id);
+				$rnp_stmt->execute();
+				$rnp_res = $rnp_stmt->get_result();
+				$rnp_row = $rnp_res ? $rnp_res->fetch_assoc() : null;
+				if ($rnp_row && !empty($rnp_row['due_date'])) {
+					$__next_pmt_date = date("jS M, Y", strtotime($rnp_row['due_date']));
+				}
+				$rnp_stmt->close();
+			}
 
             $get_this_user = "select * from users where id='".$_uploader_id."'";
             $gtu_result = $con->query($get_this_user);
@@ -506,6 +552,7 @@
                 $ns_link = "";
             }
         }
+		$tenant_stmt->close();
 ?>
 		<div class="col-xxl-12">
 			<div class="dashboard_title_area">
@@ -593,8 +640,18 @@
 	</div>
 <?php
     }elseif($target_name == "payments"){
-        $retrieve_tenant_payments = "select * from payment_history where id='".$target_id."'";
-		$rtp_result = $con->query($retrieve_tenant_payments);
+		$my_tenant_id = (int)$this_tenant;
+		$pay_stmt = $con->prepare("SELECT ph.*, t.first_name, t.last_name FROM payment_history ph JOIN tenants t ON t.id=ph.tenant_id WHERE ph.id=? AND ph.tenant_id=? LIMIT 1");
+		if (!$pay_stmt) {
+			_vd_forbidden('Unable to load payment.');
+		}
+		$pay_stmt->bind_param('ii', $target_id, $my_tenant_id);
+		$pay_stmt->execute();
+		$rtp_result = $pay_stmt->get_result();
+		if (!$rtp_result || $rtp_result->num_rows < 1) {
+			$pay_stmt->close();
+			_vd_forbidden('Access denied.');
+		}
 		while($row = $rtp_result->fetch_assoc())
 		{
 			$_id=$row['id'];
@@ -605,15 +662,10 @@
 			$_paymentdate=$row['payment_date'];
 			$_paidamount=$row['paid_amount'];
 			$_details=$row['details'];
-
-			$retrieve_this_tenant = "select * from tenants where id='".$_tenant_id."'";
-			$rtt_result = $con->query($retrieve_this_tenant);
-			while($row = $rtt_result->fetch_assoc())
-			{
-				$_first_name=$row['first_name'];
-				$_last_name=$row['last_name'];
-			}
+			$_first_name=$row['first_name'];
+			$_last_name=$row['last_name'];
 		}
+		$pay_stmt->close();
 ?>
 		<div class="col-xxl-12">
 			<div class="dashboard_title_area">
@@ -691,8 +743,18 @@
 	</div>
 <?php
     }elseif($target_name == "notifications"){
-        $retrieve_this_notification = "select * from notifications where id='".$target_id."'";
-		$rtp_result = $con->query($retrieve_this_notification);
+		$my_tenant_id = (int)$this_tenant;
+		$notification_stmt = $con->prepare("SELECT * FROM notifications WHERE id=? AND `for`='tenants' AND target_id=? LIMIT 1");
+		if (!$notification_stmt) {
+			_vd_forbidden('Unable to load notification.');
+		}
+		$notification_stmt->bind_param('ii', $target_id, $my_tenant_id);
+		$notification_stmt->execute();
+		$rtp_result = $notification_stmt->get_result();
+		if (!$rtp_result || $rtp_result->num_rows < 1) {
+			$notification_stmt->close();
+			_vd_forbidden('Access denied.');
+		}
 		while($row = $rtp_result->fetch_assoc())
 		{
             $notification_date=date("l, jS M, Y - h:ia", strtotime($row['date']));
@@ -701,10 +763,15 @@
             $notification_view_status=$row['view_status'];
 
 			if($notification_view_status == '0'){
-				$update_view_status = "update `notifications` SET `view_status` = '1' WHERE `id` = '".$target_id."'";
-                $run_uvs = mysqli_query($con, $update_view_status);
+				$uvs_stmt = $con->prepare("UPDATE notifications SET view_status='1' WHERE id=? AND `for`='tenants' AND target_id=?");
+				if ($uvs_stmt) {
+					$uvs_stmt->bind_param('ii', $target_id, $my_tenant_id);
+					$uvs_stmt->execute();
+					$uvs_stmt->close();
+				}
 			}
 		}
+		$notification_stmt->close();
 ?>
 		<div class="col-xxl-12">
 			<div class="dashboard_title_area">
@@ -752,8 +819,17 @@
     }elseif($target_name == "artisans"){
         $artisan = $target_id;
 
-        $retrieve_all_artisans = "select * from artisans where id='".$artisan."'";
-        $raa_result = $con->query($retrieve_all_artisans);
+		$artisan_stmt = $con->prepare("SELECT * FROM artisans WHERE id=? LIMIT 1");
+		if (!$artisan_stmt) {
+			_vd_forbidden('Unable to load service provider.', 'artisans.php');
+		}
+		$artisan_stmt->bind_param('i', $artisan);
+		$artisan_stmt->execute();
+		$raa_result = $artisan_stmt->get_result();
+		if (!$raa_result || $raa_result->num_rows < 1) {
+			$artisan_stmt->close();
+			_vd_forbidden('Service provider not found.', 'artisans.php');
+		}
         while($row = $raa_result->fetch_assoc())
         {
             $_id=$row['id'];
@@ -764,6 +840,7 @@
             $_address=$row['address'];
             $_uploader_id=$row['uploader_id'];
         }
+		$artisan_stmt->close();
 ?>
 <div class="content-body">
     <!-- row -->	
@@ -832,21 +909,16 @@
                                     </td>
                                     <td>
                                         <?php 
-                                            $get_artisan_services = "select * from artisan_services where artisan_id='".$artisan."'";
-                                            $gas_result = $con->query($get_artisan_services);
-                                            while($row = $gas_result->fetch_assoc())
-                                            {
-                                                $_service_id=$row['service_id'];
-                                
-                                                $retrieve_this_service = "select * from all_services where id='".$_service_id."'";
-                                                $rts_result = $con->query($retrieve_this_service);
-                                                while($row = $rts_result->fetch_assoc())
-                                                {
-                                                    $_service_name=$row['service_name'];
-                                                }
-                                
-                                                echo "<span class='badge bg-secondary light border-0' style='text-transform: uppercase; margin-right: 5px;'>".$_service_name."</span>";
-                                            }
+											$svc_stmt = $con->prepare("SELECT s.service_name FROM artisan_services a JOIN all_services s ON s.id=a.service_id WHERE a.artisan_id=?");
+											if ($svc_stmt) {
+												$svc_stmt->bind_param('i', $artisan);
+												$svc_stmt->execute();
+												$svc_res = $svc_stmt->get_result();
+												while($svc_res && ($svc_row = $svc_res->fetch_assoc())) {
+													echo "<span class='badge bg-secondary light border-0' style='text-transform: uppercase; margin-right: 5px;'>".$svc_row['service_name']."</span>";
+												}
+												$svc_stmt->close();
+											}
                                         ?>
                                     </td>
                                 </tr>
@@ -856,18 +928,21 @@
                                     </td>
                                     <td>
                                         <?php
-											$get_artisan_rating = "select * from artisan_rating where artisan_id='".$artisan."'";
-											$gar_result = $con->query($get_artisan_rating);
-											$rating_count = mysqli_num_rows($gar_result);
+											$rating_total = 0;
+											$rating_count = 0;
+											$rating_stmt = $con->prepare("SELECT rating FROM artisan_rating WHERE artisan_id=?");
+											if ($rating_stmt) {
+												$rating_stmt->bind_param('i', $artisan);
+												$rating_stmt->execute();
+												$gar_result = $rating_stmt->get_result();
+												while($gar_result && ($row = $gar_result->fetch_assoc())) {
+													$rating_total += (int)$row['rating'];
+													$rating_count++;
+												}
+												$rating_stmt->close();
+											}
 
 											if($rating_count > 0){
-												$rating_total = 0;
-												while($row = $gar_result->fetch_assoc())
-												{
-													$_rating=$row['rating'];
-
-													$rating_total = $rating_total + $_rating;
-												}
 												$average_rating = number_format(($rating_total/$rating_count), 0);
 												
 												$stars = 0;
@@ -887,23 +962,28 @@
                                     </td>
                                     <td>
                                         <?php
-											$this_users_rating = "select * from artisan_rating where artisan_id='".$artisan."' and rater_id='".$this_tenant."' and rater_role='tenant'";
-											$tur_result = $con->query($this_users_rating);
-											$tur_count = mysqli_num_rows($tur_result);
-
-											if($tur_count > 0){
-												while($row = $tur_result->fetch_assoc())
-												{
-													$_rating=$row['rating'];
+											$_rating = "";
+											$tur_stmt = $con->prepare("SELECT rating FROM artisan_rating WHERE artisan_id=? AND rater_id=? AND rater_role='tenant' LIMIT 1");
+											if ($tur_stmt) {
+												$rater = (int)$this_tenant;
+												$tur_stmt->bind_param('ii', $artisan, $rater);
+												$tur_stmt->execute();
+												$tur_res = $tur_stmt->get_result();
+												$tur_row = $tur_res ? $tur_res->fetch_assoc() : null;
+												if ($tur_row) {
+													$_rating = (string)$tur_row['rating'];
 												}
+												$tur_stmt->close();
+											}
+
+											if(!empty($_rating)){
 												
 												$_stars = 0;
-												while($_stars < $_rating){
+												while($_stars < (int)$_rating){
 													echo "<i class='fa fa-star'></i>";
 													$_stars++;
 												}
 											}else{
-												$_rating = "";
 												echo "<i>You haven't rated this provider yet.</i>";
 											}
                                         ?>

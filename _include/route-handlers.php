@@ -1,14 +1,21 @@
 <?php
 
-//--Start Counts - PHASE 5: Convert to prepared statements
-    // PHASE 5: Active Agents count
-    $stmt = $con->prepare("SELECT COUNT(*) as count FROM users WHERE role_id=3 AND dashboard_access=1");
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $row = $result->fetch_assoc();
-    $active_agents_count = $row['count'];
-    $stmt->close();
+require_once(__DIR__ . '/CSRFProtection.php');
 
+if (!function_exists('ob_table_exists')) {
+    function ob_table_exists(mysqli $con, string $tableName): bool
+    {
+        try {
+            $safe = $con->real_escape_string($tableName);
+            $res = $con->query("SHOW TABLES LIKE '{$safe}'");
+            return ($res && $res->num_rows > 0);
+        } catch (mysqli_sql_exception $e) {
+            return false;
+        }
+    }
+}
+
+//--Start Counts - PHASE 5: Convert to prepared statements
     // PHASE 5: Rental Properties count
     $stmt = $con->prepare("SELECT COUNT(*) as count FROM properties WHERE type='Rent'");
     $stmt->execute();
@@ -1284,11 +1291,24 @@
                 $_SESSION['expire'] = time() + $res_sess_duration;
             
                 if(isset($_POST['submit_new_landlord'])){
-                    if(isset($_SESSION['nl_focus'])){
-                        echo "<script>window.location='new-landlord.php?landlord-id=".$inserted_id."';</script>";
+                    // Check if request came from new-landlord.php workflow
+                    $from_new_landlord = (isset($_SESSION['nl_focus']) && isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'new-landlord.php') !== false);
+                    
+                    if($from_new_landlord){
+                        $redirect_url = "new-landlord.php?landlord-id=".$inserted_id;
                     }else{
-                        echo "<script>window.location='view-details.php?id=".$inserted_id."&view_target=landlords&source=manage-landlords';</script>";
+                        // Redirect back to manage-landlords to show temp password modal
+                        $redirect_url = "manage-landlords.php";
                     }
+
+                    // IMPORTANT: use server-side redirect so manage-landlords.php doesn't unset
+                    // the temp password session vars in the same POST response.
+                    if (!headers_sent()) {
+                        header("Location: {$redirect_url}");
+                        exit;
+                    }
+                    echo "<script>window.location='".htmlspecialchars($redirect_url, ENT_QUOTES, 'UTF-8')."';</script>";
+                    exit;
                 }
             
                 // elseif(isset($_POST['submit_landlord_add_property'])){
@@ -1325,20 +1345,6 @@
         } else {
             $post_ul = false;
         }
-
-        if(!empty($_POST['reset_landlord_password'])){
-            $reset_landlord_password = $_POST['reset_landlord_password'];
-            $landlord_password_hash = password_hash($reset_landlord_password, PASSWORD_DEFAULT); //create password hash
-            
-            // PHASE 5: Use prepared statement for password reset
-            $reset_stmt = $con->prepare("UPDATE landlords SET password=?, password_status='1' WHERE id=?");
-            if($reset_stmt !== false){
-                $reset_stmt->bind_param("si", $landlord_password_hash, $this_landlord_id);
-                $reset_stmt->execute();
-                $reset_stmt->close();
-                AuditLog::log('UPDATE', 'landlords', $this_landlord_id, null, array('action' => 'password_reset', 'timestamp' => date('Y-m-d H:i:s')), $this_user);
-            }
-        }
                                 
         if ($post_ul) {
             $response = "success";
@@ -1368,17 +1374,23 @@
 
     //add new property
     if(isset($_POST['submit_new_property']) || isset($_POST['submit_property_add_tenants'])){
-        $title = $_POST['title'];
-        $description =$_POST['description'];
-        $closest_landmark =$_POST['closest_landmark'];
-        $geo_location_url =$_POST['geo_location_url'];	
-        $address =$_POST['address'];	
-        $city =$_POST['city'];	
-        $state =$_POST['state'];	
-        $country =$_POST['country'];
+        // Debug: Log what we received
+        error_log('ADD_PROPERTY: Form submitted. Button: ' . (isset($_POST['submit_new_property']) ? 'submit_new_property' : 'submit_property_add_tenants'));
+        error_log('ADD_PROPERTY: CSRF token present: ' . (isset($_POST['csrf_token']) ? 'yes' : 'no'));
+        
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '', 'Invalid request. Please refresh the page and try again.');
+
+        $title = (string)($_POST['title'] ?? '');
+        $description =(string)($_POST['description'] ?? '');
+        $closest_landmark =(string)($_POST['closest_landmark'] ?? '');
+        $geo_location_url =(string)($_POST['geo_location_url'] ?? '');	
+        $address =(string)($_POST['address'] ?? '');	
+        $city =(string)($_POST['city'] ?? '');	
+        $state =(string)($_POST['state'] ?? '');	
+        $country =(string)($_POST['country'] ?? '');
             $selected_country = "<option value=''>Select Country</option>";
             $country_option = "";	
-        $type =$_POST['type'];	
+        $type =(string)($_POST['type'] ?? '');	
             if($type == "Rent"){
                 $rent_option = "selected";
                 $sale_option = "";
@@ -1386,62 +1398,108 @@
                 $rent_option = "";
                 $sale_option = "selected";
             }
-        $living__spaces =$_POST['living_spaces'];
-        $uploader =$_POST['uploader'];
+        $living__spaces =(string)($_POST['living_spaces'] ?? '');
+        $uploader =(int)($_POST['uploader'] ?? 0);
 
-        if($_POST['landlord_input_type'] == "existing"){
-            $landlord = intval($_POST['landlord']);
-        }elseif($_POST['landlord_input_type'] == "new"){
+        $landlord = 0;
+        $landlord_input_type = (string)($_POST['landlord_input_type'] ?? '');
+        if($landlord_input_type === "existing"){
+            $landlord = (int)($_POST['landlord'] ?? 0);
+            if ($landlord <= 0) {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Please select a landlord.';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='manage-properties.php';</script>";
+                exit;
+            }
+        }elseif($landlord_input_type === "new"){
             $landlord_first_name = InputValidator::sanitizeText($_POST['landlord_first_name']);
             $landlord_last_name = InputValidator::sanitizeText($_POST['landlord_last_name']);
             $landlord_email_address = InputValidator::sanitizeText($_POST['landlord_email_address']);
             $landlord_contact_number = InputValidator::sanitizeText($_POST['landlord_contact_number']);
+
+            if ($landlord_first_name === '' || $landlord_last_name === '' || $landlord_contact_number === '') {
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Please fill in the new landlord details (first name, last name, contact number).';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='manage-properties.php';</script>";
+                exit;
+            }
           
             // PHASE 5: Use prepared statement for new landlord
-            $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, uploader_id) VALUES (?, ?, ?, ?, ?)");
-            if($stmt !== false){
-                $uploader_int = intval($uploader);
-                $stmt->bind_param("ssssi", $landlord_first_name, $landlord_last_name, $landlord_contact_number, $landlord_email_address, $uploader_int);
-                if($stmt->execute()){
-                    $landlord = $stmt->insert_id;
-                    $stmt->close();
-                    
-                    //Create and add Landlord ID
-                    $landlord_id = "OBL".sprintf("%03d", $landlord);
-                    
-                    // PHASE 5: Use prepared statement for landlord_id update
-                    $update_stmt = $con->prepare("UPDATE landlords SET landlord_id=? WHERE id=?");
-                    $update_stmt->bind_param("si", $landlord_id, $landlord);
-                    $update_stmt->execute();
-                    $update_stmt->close();
-                    
-                    AuditLog::log('INSERT', 'landlords', $landlord, null, array('landlord_id' => $landlord_id, 'created_for' => 'property'), $uploader_int);
+            try {
+                $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, uploader_id) VALUES (?, ?, ?, ?, ?)");
+                if($stmt !== false){
+                    $stmt->bind_param("ssssi", $landlord_first_name, $landlord_last_name, $landlord_contact_number, $landlord_email_address, $uploader);
+                    if($stmt->execute()){
+                        $landlord = $stmt->insert_id;
+                        $stmt->close();
+                        
+                        //Create and add Landlord ID
+                        $landlord_id = "OBL".sprintf("%03d", $landlord);
+                        
+                        // PHASE 5: Use prepared statement for landlord_id update
+                        $update_stmt = $con->prepare("UPDATE landlords SET landlord_id=? WHERE id=?");
+                        if ($update_stmt) {
+                            $update_stmt->bind_param("si", $landlord_id, $landlord);
+                            $update_stmt->execute();
+                            $update_stmt->close();
+                        }
+                        
+                        AuditLog::log('INSERT', 'landlords', $landlord, null, array('landlord_id' => $landlord_id, 'created_for' => 'property'), $uploader);
+                    } else {
+                        $stmt->close();
+                        throw new mysqli_sql_exception('Failed to create landlord');
+                    }
                 } else {
-                    $stmt->close();
+                    throw new mysqli_sql_exception('Failed to prepare landlord insert');
                 }
+            } catch (mysqli_sql_exception $e) {
+                error_log('ADD_PROPERTY: landlord insert failed: ' . $e->getMessage());
+                $_SESSION['response'] = 'error';
+                $_SESSION['message'] = 'Could not create the new landlord. Please try again or contact support.';
+                $_SESSION['expire'] = time() + 10;
+                echo "<script>window.location='manage-properties.php';</script>";
+                exit;
             }
+        }else{
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Please select landlord option (existing/new).';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-properties.php';</script>";
+            exit;
         }
 
         // PHASE 5: Use prepared statement for INSERT property
-        $landlord_int = intval($landlord);
-        $uploader_int = intval($uploader);
-        $stmt = $con->prepare("INSERT INTO properties(landlord_id, type, title, description, closest_landmark, geo_location_url, location_address, location_city, location_state, location_country, no_of_apartments, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?)");
-        if($stmt !== false){
-            $stmt->bind_param("issssssssssi", $landlord_int, $type, $title, $description, $closest_landmark, $geo_location_url, $address, $city, $state, $country, $living__spaces, $uploader_int);
-            if($stmt->execute()){
-                $inserted_id = $stmt->insert_id;
-                $stmt->close();
+        $landlord_int = (int)$landlord;
+        if ($landlord_int <= 0) {
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Landlord is required to create a property.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-properties.php';</script>";
+            exit;
+        }
+
+        try {
+            $stmt = $con->prepare("INSERT INTO properties(landlord_id, type, title, description, closest_landmark, geo_location_url, location_address, location_city, location_state, location_country, no_of_apartments, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?)");
+            if($stmt !== false){
+                $stmt->bind_param("issssssssssi", $landlord_int, $type, $title, $description, $closest_landmark, $geo_location_url, $address, $city, $state, $country, $living__spaces, $uploader);
+                if($stmt->execute()){
+                    $inserted_id = $stmt->insert_id;
+                    $stmt->close();
                 
-                //Create and add Property ID
-                $property_id = "OBP".sprintf("%03d", $inserted_id);
-                
-                // PHASE 5: Use prepared statement for property_id update
-                $update_stmt = $con->prepare("UPDATE properties SET property_id=? WHERE id=?");
-                $update_stmt->bind_param("si", $property_id, $inserted_id);
-                $update_stmt->execute();
-                $update_stmt->close();
-                
-                AuditLog::log('INSERT', 'properties', $inserted_id, null, array('property_id' => $property_id, 'type' => $type, 'timestamp' => date('Y-m-d H:i:s')), $uploader_int);
+                    //Create and add Property ID
+                    $property_id = "OBP".sprintf("%03d", $inserted_id);
+                    
+                    // PHASE 5: Use prepared statement for property_id update
+                    $update_stmt = $con->prepare("UPDATE properties SET property_id=? WHERE id=?");
+                    if ($update_stmt) {
+                        $update_stmt->bind_param("si", $property_id, $inserted_id);
+                        $update_stmt->execute();
+                        $update_stmt->close();
+                    }
+                    
+                    AuditLog::log('INSERT', 'properties', $inserted_id, null, array('property_id' => $property_id, 'type' => $type, 'timestamp' => date('Y-m-d H:i:s')), $uploader);
 
                 $response = "success";
                 $message = "Property added successfully.";
@@ -1452,29 +1510,42 @@
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
                 
+                // Determine redirect based on where the request came from
+                $from_new_landlord = (isset($_SESSION['nl_focus']) && isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'new-landlord.php') !== false);
+                
                 if(isset($_POST['submit_new_property'])){
-                    if(isset($_SESSION['nl_focus'])){
+                    if($from_new_landlord){
+                        // Clear the workflow session flag when done
+                        unset($_SESSION['nl_focus']);
                         echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."';</script>";
                     }else{
                         echo "<script>window.location='manage-properties.php';</script>";
                     }
                 }elseif(isset($_POST['submit_property_add_tenants'])){
+                    // Clear workflow flag regardless (user chose to add tenants instead)
                     if(isset($_SESSION['nl_focus'])){
+                        unset($_SESSION['nl_focus']);
+                    }
+                    if($from_new_landlord){
                         echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."&new-tenant=true';</script>";
                     }else{
                         echo "<script>window.location='manage-tenants.php?add-tenant=true&property-id=".$inserted_id."';</script>";
                     }
                 }
+                } else {
+                    $stmt->close();
+                    throw new mysqli_sql_exception('Failed to insert property');
+                }
+            } else {
+                throw new mysqli_sql_exception('Failed to prepare property insert');
             }
-        } else {
-            $response = "error";
-            $message = "Process failed! Try again later or contact tech support.";
-            
-            $_SESSION['response'] = $response;
-            $_SESSION['message'] = $message;
-            
-            $res_sess_duration = 10;
-            $_SESSION['expire'] = time() + $res_sess_duration;
+        } catch (mysqli_sql_exception $e) {
+            error_log('ADD_PROPERTY: property insert failed: ' . $e->getMessage());
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Could not add property. Please confirm all required fields and try again.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-properties.php';</script>";
+            exit;
         }
     }
 
@@ -1645,11 +1716,28 @@
                 $semiannually_option = "";
                 $annually_option = "selected";
             }
-        $lpd = InputValidator::sanitizeText($_POST['lpd']);
-        $amount_paid = floatval($_POST['amount_paid']);
-        $npd = InputValidator::sanitizeText($_POST['npd']);
-        $pending_amount = floatval($_POST['pending_amount']);
-        $uploader = intval($_POST['uploader']);
+        $lpd = InputValidator::sanitizeText($_POST['lpd'] ?? '');
+        $amount_paid = floatval($_POST['amount_paid'] ?? 0);
+        $npd = InputValidator::sanitizeText($_POST['npd'] ?? '');
+        $pending_amount = floatval($_POST['pending_amount'] ?? 0);
+        $uploader = intval($_POST['uploader'] ?? 0);
+
+        // Validate dates
+        if(empty($lpd) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $lpd) || !strtotime($lpd)){
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Invalid Last Payment Date. Please use a valid date format.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-tenants.php';</script>";
+            exit;
+        }
+
+        if(empty($npd) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $npd) || !strtotime($npd)){
+            $_SESSION['response'] = 'error';
+            $_SESSION['message'] = 'Invalid Next Payment Date. Please use a valid date format.';
+            $_SESSION['expire'] = time() + 10;
+            echo "<script>window.location='manage-tenants.php';</script>";
+            exit;
+        }
 
         // Generate a temporary password for the tenant (admin shares this with the tenant)
         $temp_password_plain = generateTempPassword(10);
@@ -1683,39 +1771,49 @@
                 $_SESSION['new_tenant_temp_email'] = $email;
                 $_SESSION['new_tenant_temp_name'] = trim($firstname . ' ' . $lastname);
 
-                // PHASE 5: Use prepared statement for payment history INSERT
-                $stmt2 = $con->prepare("INSERT INTO payment_history(tenant_id, due_date, expected_amount, payment_date, paid_amount) VALUES (?, ?, ?, ?, ?)");
-                if($stmt2 !== false){
-                    $stmt2->bind_param("isddd", $inserted_id, $lpd, $amount_paid, $lpd, $amount_paid);
-                    if($stmt2->execute()){
-                        $iph_inserted_id = $stmt2->insert_id;
-                        $iph_inserted_id2 = $iph_inserted_id + 1;
-                        $stmt2->close();
+                // PHASE 5: Use prepared statement for payment history INSERT with error handling
+                try {
+                    $stmt2 = $con->prepare("INSERT INTO payment_history(tenant_id, due_date, expected_amount, payment_date, paid_amount) VALUES (?, ?, ?, ?, ?)");
+                    if($stmt2 !== false){
+                        $stmt2->bind_param("isdsd", $inserted_id, $lpd, $amount_paid, $lpd, $amount_paid);
+                        if($stmt2->execute()){
+                            $iph_inserted_id = $stmt2->insert_id;
+                            $iph_inserted_id2 = $iph_inserted_id + 1;
+                            $stmt2->close();
 
-                        //Create and add Payment ID
-                        $payment_id = "OBPH".sprintf("%03d", $iph_inserted_id);
-                        
-                        // PHASE 5: Use prepared statement for payment_id update
-                        $update_stmt2 = $con->prepare("UPDATE payment_history SET payment_id=? WHERE id=?");
-                        $update_stmt2->bind_param("si", $payment_id, $iph_inserted_id);
-                        $update_stmt2->execute();
-                        $update_stmt2->close();
+                            //Create and add Payment ID
+                            $payment_id = "OBPH".sprintf("%03d", $iph_inserted_id);
+                            
+                            // PHASE 5: Use prepared statement for payment_id update
+                            $update_stmt2 = $con->prepare("UPDATE payment_history SET payment_id=? WHERE id=?");
+                            $update_stmt2->bind_param("si", $payment_id, $iph_inserted_id);
+                            $update_stmt2->execute();
+                            $update_stmt2->close();
 
-                        $payment_id2 = "OBPH".sprintf("%03d", $iph_inserted_id2);
-                        
-                        // PHASE 5: Use prepared statement for second payment history INSERT
-                        $stmt3 = $con->prepare("INSERT INTO payment_history(payment_id, tenant_id, due_date, expected_amount) VALUES (?, ?, ?, ?)");
-                        if($stmt3 !== false){
-                            $stmt3->bind_param("sisd", $payment_id2, $inserted_id, $npd, $pending_amount);
-                            $stmt3->execute();
-                            $stmt3->close();
+                            $payment_id2 = "OBPH".sprintf("%03d", $iph_inserted_id2);
+                            
+                            // PHASE 5: Use prepared statement for second payment history INSERT
+                            $stmt3 = $con->prepare("INSERT INTO payment_history(payment_id, tenant_id, due_date, expected_amount) VALUES (?, ?, ?, ?)");
+                            if($stmt3 !== false){
+                                $stmt3->bind_param("sisd", $payment_id2, $inserted_id, $npd, $pending_amount);
+                                $stmt3->execute();
+                                $stmt3->close();
+                            }
+                            
+                            // PHASE 5: Log tenant creation
+                            AuditLog::log('INSERT', 'tenants', $inserted_id, null, array('tenant_id' => $tenant_id, 'property_id' => $property_int, 'timestamp' => date('Y-m-d H:i:s')), $uploader);
+                        } else {
+                            $stmt2->close();
+                            throw new mysqli_sql_exception('Failed to insert payment history');
                         }
-                        
-                        // PHASE 5: Log tenant creation
-                        AuditLog::log('INSERT', 'tenants', $inserted_id, null, array('tenant_id' => $tenant_id, 'property_id' => $property_int, 'timestamp' => date('Y-m-d H:i:s')), $uploader);
-                    } else {
-                        $stmt2->close();
                     }
+                } catch (mysqli_sql_exception $e) {
+                    error_log("ADD_TENANT: Payment history insert failed - " . $e->getMessage());
+                    $_SESSION['response'] = 'error';
+                    $_SESSION['message'] = 'Tenant added but payment history failed. Invalid date format. Please check Last Payment Date and Next Payment Date.';
+                    $_SESSION['expire'] = time() + 10;
+                    echo "<script>window.location='manage-tenants.php';</script>";
+                    exit;
                 }
 
                 $response = "success";
@@ -1727,7 +1825,10 @@
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
             
-                if(isset($_SESSION['nl_focus'])){
+                // Check if request came from new-landlord.php workflow
+                $from_new_landlord = (isset($_SESSION['nl_focus']) && isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'new-landlord.php') !== false);
+                
+                if($from_new_landlord){
                     $retrieve_all_properties = "select * from properties where id='".$property."'";
                     $rap_result = $con->query($retrieve_all_properties);
                     while($row = $rap_result->fetch_assoc())
@@ -1735,9 +1836,25 @@
                         $_landlord_id=$row['landlord_id'];
                     }
 
-                    echo "<script>window.location='new-landlord.php?landlord-id=".$_landlord_id."&new-tenant=true';</script>";
+                    // Clear workflow flag when done
+                    unset($_SESSION['nl_focus']);
+                    
+                    // Use server-side redirect to show temp password modal
+                    $redirect_url = "new-landlord.php?landlord-id=".$_landlord_id."&new-tenant=true";
+                    if (!headers_sent()) {
+                        header("Location: {$redirect_url}");
+                        exit;
+                    }
+                    echo "<script>window.location='".htmlspecialchars($redirect_url, ENT_QUOTES, 'UTF-8')."';</script>";
+                    exit;
                 }else{
+                    // Use server-side redirect to show temp password modal
+                    if (!headers_sent()) {
+                        header("Location: manage-tenants.php");
+                        exit;
+                    }
                     echo "<script>window.location='manage-tenants.php';</script>";
+                    exit;
                 }
             } else {
                 $response = "error";
@@ -2789,6 +2906,7 @@
 
         //delete Listing
         if($target == "delete-listing"){
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid delete request.');
             $target_id = $_GET['id'];
 
             // Audit snapshot before delete
@@ -2805,31 +2923,46 @@
                 }
             }
 
-            //delete listing from DB
-            $delete_listing = "delete from listings where id='".$target_id."'";
-            $run_dl = mysqli_query($con, $delete_listing);
+            //delete listing from DB (prepared)
+            $run_ok = false;
+            $target_id_int = intval($target_id);
 
-            //other related delete actions
-            $get_listing_media="SELECT * FROM listing_media where listing_id='".$target_id."'";
-            $glm_result=mysqli_query($con, $get_listing_media);
-            while($row = $glm_result->fetch_assoc()){
-                $tlm_id=$row['id'];
-                $tlm_file_name=$row['file_name'];
-
-                $dir = "file_uploads/listings_media/images";    
-                $dirHandle = opendir($dir);    
-                while ($file = readdir($dirHandle)) {    
-                    if($file==$tlm_file_name) {
-                        unlink($dir."/".$file);
+            // Delete related media (db + files)
+            if ($target_id_int > 0) {
+                $media_stmt = $con->prepare("SELECT id, file_name FROM listing_media WHERE listing_id=?");
+                if ($media_stmt) {
+                    $media_stmt->bind_param('i', $target_id_int);
+                    $media_stmt->execute();
+                    $media_res = $media_stmt->get_result();
+                    $del_media_stmt = $con->prepare("DELETE FROM listing_media WHERE id=?");
+                    while ($media_res && ($mrow = $media_res->fetch_assoc())) {
+                        $tlm_id = (int)$mrow['id'];
+                        $tlm_file_name = (string)($mrow['file_name'] ?? '');
+                        $safe_name = $tlm_file_name !== '' ? basename($tlm_file_name) : '';
+                        $file_path = $safe_name !== '' ? ("file_uploads/listings_media/images/" . $safe_name) : '';
+                        if ($file_path !== '' && is_file($file_path)) {
+                            @unlink($file_path);
+                        }
+                        if ($del_media_stmt && $tlm_id > 0) {
+                            $del_media_stmt->bind_param('i', $tlm_id);
+                            $del_media_stmt->execute();
+                        }
                     }
-                }    
-                closedir($dirHandle);
+                    if ($del_media_stmt) {
+                        $del_media_stmt->close();
+                    }
+                    $media_stmt->close();
+                }
 
-                $delete_lm = "delete from listing_media where id='".$tlm_id."'";
-                $run_dlm = mysqli_query($con, $delete_lm);
+                $del_listing_stmt = $con->prepare("DELETE FROM listings WHERE id=? LIMIT 1");
+                if ($del_listing_stmt) {
+                    $del_listing_stmt->bind_param('i', $target_id_int);
+                    $run_ok = $del_listing_stmt->execute();
+                    $del_listing_stmt->close();
+                }
             }
 
-            if($run_dl){
+            if($run_ok){
                 AuditLog::log('DELETE', 'listings', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Listing data deleted.";
@@ -2855,6 +2988,7 @@
 
         //delete Listing Media
         if($target == "delete-media"){
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid delete request.');
             $target_id = $_GET['id'];
 
             // Audit snapshot before delete
@@ -2871,27 +3005,42 @@
                 }
             }
 
-            //other related delete actions
-            $get_listing_media="SELECT * FROM listing_media where id='".$target_id."'";
-            $glm_result=mysqli_query($con, $get_listing_media);
-            while($row = $glm_result->fetch_assoc()){
-                $tlm_listing_id=$row['listing_id'];
-                $tlm_file_name=$row['file_name'];
-
-                $dir = "file_uploads/listings_media/images";    
-                $dirHandle = opendir($dir);    
-                while ($file = readdir($dirHandle)) {    
-                    if($file==$tlm_file_name) {
-                        unlink($dir."/".$file);
+            // Load file data (prepared)
+            $target_id_int = intval($target_id);
+            $tlm_listing_id = null;
+            $tlm_file_name = '';
+            if ($target_id_int > 0) {
+                $load_stmt = $con->prepare("SELECT listing_id, file_name FROM listing_media WHERE id=? LIMIT 1");
+                if ($load_stmt) {
+                    $load_stmt->bind_param('i', $target_id_int);
+                    $load_stmt->execute();
+                    $load_res = $load_stmt->get_result();
+                    $load_row = $load_res ? $load_res->fetch_assoc() : null;
+                    $load_stmt->close();
+                    if ($load_row) {
+                        $tlm_listing_id = $load_row['listing_id'];
+                        $tlm_file_name = (string)($load_row['file_name'] ?? '');
                     }
-                }    
-                closedir($dirHandle);
+                }
             }
 
-            $delete_lm = "delete from listing_media where id='".$target_id."'";
-            $run_dlm = mysqli_query($con, $delete_lm);
+            $safe_name = $tlm_file_name !== '' ? basename($tlm_file_name) : '';
+            $file_path = $safe_name !== '' ? ("file_uploads/listings_media/images/" . $safe_name) : '';
+            if ($file_path !== '' && is_file($file_path)) {
+                @unlink($file_path);
+            }
 
-            if($run_dlm){
+            $run_ok = false;
+            if ($target_id_int > 0) {
+                $delete_stmt = $con->prepare("DELETE FROM listing_media WHERE id=? LIMIT 1");
+                if ($delete_stmt) {
+                    $delete_stmt->bind_param('i', $target_id_int);
+                    $run_ok = $delete_stmt->execute();
+                    $delete_stmt->close();
+                }
+            }
+
+            if($run_ok){
                 AuditLog::log('DELETE', 'listing_media', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Listing media deleted.";
@@ -2902,7 +3051,8 @@
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
 
-                echo "<script>window.location='manage-listing-media.php?listing-id=".$tlm_listing_id."';</script>";	
+                $redir_listing = urlencode((string)($tlm_listing_id ?? ''));
+                echo "<script>window.location='manage-listing-media.php?listing-id=".$redir_listing."';</script>";	
             }else{
                 $response = "error";
                 $message = "Process failed. Try again later or contact tech support.";
@@ -2917,6 +3067,7 @@
 
         //delete payment
         if($target == "delete-payment"){
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid delete request.');
             $target_id = $_GET['id'];
             $tenant_id = $_GET['tenant-id'];
 
@@ -2934,11 +3085,18 @@
                 }
             }
 
-            //delete payment from DB
-            $delete_payment = "delete from payment_history where id='".$target_id."'";
-            $run_dpmt = mysqli_query($con, $delete_payment);
+            //delete payment from DB (prepared)
+            $run_ok = false;
+            if ($target_id_int > 0) {
+                $del_stmt = $con->prepare("DELETE FROM payment_history WHERE id=? LIMIT 1");
+                if ($del_stmt) {
+                    $del_stmt->bind_param('i', $target_id_int);
+                    $run_ok = $del_stmt->execute();
+                    $del_stmt->close();
+                }
+            }
 
-            if($run_dpmt){
+            if($run_ok){
                 AuditLog::log('DELETE', 'payment_history', $target_id_int, $before_data, null, $this_user);
                 $response = "success";
                 $message = "Payment record deleted successfully.";
@@ -2964,12 +3122,20 @@
 
         //close ticket
         if($target == "close-ticket"){
-            $target_id = $_GET['id'];
-            $target_source = $_GET['source'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
+            $target_source = (string)($_GET['source'] ?? '');
             $date_time = date("Y-m-d H:i:s");
 
-            $close_ticket = "update tickets set status='1', date_closed='".$date_time."' where id='".$target_id."'";
-            $run_ctkt = mysqli_query($con, $close_ticket);
+            $run_ctkt = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE tickets SET status='1', date_closed=? WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('si', $date_time, $target_id);
+                    $run_ctkt = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_ctkt){
                 $response = "success";
@@ -3003,10 +3169,11 @@
 
         //delete ticket
         if($target == "delete-ticket"){
-            $target_id = $_GET['id'];
-            $person_id = $_GET['person-id'];
-            $complaint_id = $_GET['complaint-id'];
-            $source = $_GET['source'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
+            $person_id = (int)($_GET['person-id'] ?? 0);
+            $complaint_id = (int)($_GET['complaint-id'] ?? 0);
+            $source = (string)($_GET['source'] ?? '');
 
             // Audit snapshot before delete
             $before_data = null;
@@ -3022,13 +3189,26 @@
                 }
             }
 
-            $delete_ticket = "delete from tickets where id='".$target_id."'";
-            $run_dtkt = mysqli_query($con, $delete_ticket);
+            $run_dtkt = false;
+            if ($target_id > 0) {
+                $del_stmt = $con->prepare("DELETE FROM tickets WHERE id=? LIMIT 1");
+                if ($del_stmt) {
+                    $del_stmt->bind_param('i', $target_id);
+                    $run_dtkt = $del_stmt->execute();
+                    $del_stmt->close();
+                }
+            }
 
             if($run_dtkt){
                 AuditLog::log('DELETE', 'tickets', $target_id_int, $before_data, null, $this_user);
-                $delete_ticket_convo = "delete from ticket_messages where complaint_id='".$complaint_id."'";
-                $run_dtkc = mysqli_query($con, $delete_ticket_convo);
+                if ($complaint_id > 0) {
+                    $msg_stmt = $con->prepare("DELETE FROM ticket_messages WHERE complaint_id=?");
+                    if ($msg_stmt) {
+                        $msg_stmt->bind_param('i', $complaint_id);
+                        $msg_stmt->execute();
+                        $msg_stmt->close();
+                    }
+                }
 
                 $response = "success";
                 $message = "Request deleted successfully.";
@@ -3054,10 +3234,11 @@
 
         //delete ticket type
         if($target == "delete-c-type"){
-            $target_id = $_GET['id'];
-            $source_page = $_GET['source'];
-            $source_param_1 = $_GET['user-id'];
-            $source_param_2 = $_GET['user-type'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
+            $source_page = (string)($_GET['source'] ?? '');
+            $source_param_1 = (string)($_GET['user-id'] ?? '');
+            $source_param_2 = (string)($_GET['user-type'] ?? '');
 
             // Audit snapshot before delete
             $before_data = null;
@@ -3073,13 +3254,22 @@
                 }
             }
 
-            //delete ticket type from DB
-            $delete_ticket_type = "delete from ticket_type where id='".$target_id."'";
-            $run_dtt = mysqli_query($con, $delete_ticket_type);
+            $run_dtt = false;
+            if ($target_id > 0) {
+                $del_stmt = $con->prepare("DELETE FROM ticket_type WHERE id=? LIMIT 1");
+                if ($del_stmt) {
+                    $del_stmt->bind_param('i', $target_id);
+                    $run_dtt = $del_stmt->execute();
+                    $del_stmt->close();
+                }
 
-            //other related actions
-            $update_ticket_types = "update tickets set type='0' where type='".$target_id."'";
-            $run_utt = mysqli_query($con, $update_ticket_types);
+                $up_stmt = $con->prepare("UPDATE tickets SET type='0' WHERE type=?");
+                if ($up_stmt) {
+                    $up_stmt->bind_param('i', $target_id);
+                    $up_stmt->execute();
+                    $up_stmt->close();
+                }
+            }
 
             if($run_dtt){
                 AuditLog::log('DELETE', 'ticket_type', $target_id_int, $before_data, null, $this_user);
@@ -3115,6 +3305,8 @@
                 $_SESSION['expire'] = time() + 10;
                 exit;
             }
+
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
             
             // Only admins and editors can delete tenants
             if ($tu_role_id != "1" && $tu_role_id != "2") {
@@ -3140,12 +3332,23 @@
             }
 
             //delete tenant from DB
-            $delete_tenant = "delete from tenants where id='".$target_id."'";
-            $run_dt = mysqli_query($con, $delete_tenant);
+            $run_dt = false;
+            $del_stmt = $con->prepare("DELETE FROM tenants WHERE id=? LIMIT 1");
+            if ($del_stmt) {
+                $del_stmt->bind_param('i', $target_id);
+                $run_dt = $del_stmt->execute();
+                $del_stmt->close();
+            }
 
             //other related delete actions
-            $delete_rns = "delete from rent_notification_status where tenant_id='".$target_id."'";
-            $run_rns = mysqli_query($con, $delete_rns);
+            if (ob_table_exists($con, 'rent_notification_status')) {
+                $rns_stmt = $con->prepare("DELETE FROM rent_notification_status WHERE tenant_id=?");
+                if ($rns_stmt) {
+                    $rns_stmt->bind_param('i', $target_id);
+                    $rns_stmt->execute();
+                    $rns_stmt->close();
+                }
+            }
 
             if($run_dt){
                 AuditLog::log('DELETE', 'tenants', $target_id, $before_data, null, $this_user);
@@ -3181,6 +3384,8 @@
                 $_SESSION['expire'] = time() + 10;
                 exit;
             }
+
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
             
             // Only editors can delete properties
             if ($tu_role_id != "1" && $tu_role_id != "2") {
@@ -3206,43 +3411,79 @@
             }
 
             //delete property from DB
-            $delete_property = "delete from properties where id='".$target_id."'";
-            $run_dp = mysqli_query($con, $delete_property);
+            $run_dp = false;
+            $del_prop_stmt = $con->prepare("DELETE FROM properties WHERE id=? LIMIT 1");
+            if ($del_prop_stmt) {
+                $del_prop_stmt->bind_param('i', $target_id);
+                $run_dp = $del_prop_stmt->execute();
+                $del_prop_stmt->close();
+            }
 
             //other related delete actions
-            $delete_tenants = "delete from tenants where property_id='".$target_id."'";
-            $run_dt = mysqli_query($con, $delete_tenants);
+            $del_tenants_stmt = $con->prepare("DELETE FROM tenants WHERE property_id=?");
+            if ($del_tenants_stmt) {
+                $del_tenants_stmt->bind_param('i', $target_id);
+                $del_tenants_stmt->execute();
+                $del_tenants_stmt->close();
+            }
 
-            $delete_rns = "delete from rent_notification_status where property_id='".$target_id."'";
-            $run_rns = mysqli_query($con, $delete_rns);
-
-            $get_property_listings="SELECT * FROM listings where property_id='".$target_id."'";
-            $gpl_result=mysqli_query($con, $get_property_listings);
-            while($row = $gpl_result->fetch_assoc()){
-                $tp_listing_id=$row['id'];
-
-                $get_listing_media="SELECT * FROM listing_media where listing_id='".$tp_listing_id."'";
-                $glm_result=mysqli_query($con, $get_listing_media);
-                while($row = $glm_result->fetch_assoc()){
-                    $tlm_id=$row['id'];
-                    $tlm_file_name=$row['file_name'];
-
-                    $dir = "file_uploads/listings_media/images";    
-                    $dirHandle = opendir($dir);    
-                    while ($file = readdir($dirHandle)) {    
-                        if($file==$tlm_file_name) {
-                            unlink($dir."/".$file);
-                        }
-                    }    
-                    closedir($dirHandle);
-
-                    $delete_lm = "delete from listing_media where id='".$tlm_id."'";
-                    $run_dlm = mysqli_query($con, $delete_lm);
+            if (ob_table_exists($con, 'rent_notification_status')) {
+                $del_rns_stmt = $con->prepare("DELETE FROM rent_notification_status WHERE property_id=?");
+                if ($del_rns_stmt) {
+                    $del_rns_stmt->bind_param('i', $target_id);
+                    $del_rns_stmt->execute();
+                    $del_rns_stmt->close();
                 }
             }
 
-            $delete_listings = "delete from listings where property_id='".$target_id."'";
-            $run_dls = mysqli_query($con, $delete_listings);
+            $list_stmt = $con->prepare("SELECT id FROM listings WHERE property_id=?");
+            if ($list_stmt) {
+                $list_stmt->bind_param('i', $target_id);
+                $list_stmt->execute();
+                $list_res = $list_stmt->get_result();
+
+                $media_stmt = $con->prepare("SELECT id, file_name FROM listing_media WHERE listing_id=?");
+                $del_media_stmt = $con->prepare("DELETE FROM listing_media WHERE id=?");
+
+                while ($list_res && ($lrow = $list_res->fetch_assoc())) {
+                    $tp_listing_id = (int)$lrow['id'];
+                    if ($tp_listing_id <= 0 || !$media_stmt) {
+                        continue;
+                    }
+
+                    $media_stmt->bind_param('i', $tp_listing_id);
+                    $media_stmt->execute();
+                    $mres = $media_stmt->get_result();
+                    while ($mres && ($mrow = $mres->fetch_assoc())) {
+                        $tlm_id = (int)$mrow['id'];
+                        $tlm_file_name = (string)($mrow['file_name'] ?? '');
+                        $safe_name = $tlm_file_name !== '' ? basename($tlm_file_name) : '';
+                        $file_path = $safe_name !== '' ? ("file_uploads/listings_media/images/" . $safe_name) : '';
+                        if ($file_path !== '' && is_file($file_path)) {
+                            @unlink($file_path);
+                        }
+                        if ($del_media_stmt && $tlm_id > 0) {
+                            $del_media_stmt->bind_param('i', $tlm_id);
+                            $del_media_stmt->execute();
+                        }
+                    }
+                }
+
+                if ($media_stmt) {
+                    $media_stmt->close();
+                }
+                if ($del_media_stmt) {
+                    $del_media_stmt->close();
+                }
+                $list_stmt->close();
+            }
+
+            $del_listings_stmt = $con->prepare("DELETE FROM listings WHERE property_id=?");
+            if ($del_listings_stmt) {
+                $del_listings_stmt->bind_param('i', $target_id);
+                $del_listings_stmt->execute();
+                $del_listings_stmt->close();
+            }
 
             if($run_dp){
                 AuditLog::log('DELETE', 'properties', $target_id, $before_data, null, $this_user);
@@ -3278,6 +3519,8 @@
                 $_SESSION['expire'] = time() + 10;
                 exit;
             }
+
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
             
             // Only editors can delete landlords
             if ($tu_role_id != "1" && $tu_role_id != "2") {
@@ -3303,49 +3546,94 @@
             }
 
             //delete landlord from DB
-            $delete_landlord = "delete from landlords where id='".$target_id."'";
-            $run_dl = mysqli_query($con, $delete_landlord);
+            $run_dl = false;
+            $del_ll_stmt = $con->prepare("DELETE FROM landlords WHERE id=? LIMIT 1");
+            if ($del_ll_stmt) {
+                $del_ll_stmt->bind_param('i', $target_id);
+                $run_dl = $del_ll_stmt->execute();
+                $del_ll_stmt->close();
+            }
 
             //other related delete actions
-            $get_landlord_properties="SELECT * FROM properties where landlord_id='".$target_id."'";
-            $glp_result=mysqli_query($con, $get_landlord_properties);
-            $landlord_properties_count = mysqli_num_rows($glp_result);
+            $prop_stmt = $con->prepare("SELECT id FROM properties WHERE landlord_id=?");
+            if ($prop_stmt) {
+                $prop_stmt->bind_param('i', $target_id);
+                $prop_stmt->execute();
+                $prop_res = $prop_stmt->get_result();
 
-            if($landlord_properties_count > 0){
-                while($row = $glp_result->fetch_assoc()){
-                    $tl_property_id=$row['id'];
+                $del_tenants_stmt = $con->prepare("DELETE FROM tenants WHERE property_id=?");
+                $del_rns_stmt = null;
+                if (ob_table_exists($con, 'rent_notification_status')) {
+                    $del_rns_stmt = $con->prepare("DELETE FROM rent_notification_status WHERE property_id=?");
+                }
+                $list_stmt = $con->prepare("SELECT id FROM listings WHERE property_id=?");
+                $media_stmt = $con->prepare("SELECT id, file_name FROM listing_media WHERE listing_id=?");
+                $del_media_stmt = $con->prepare("DELETE FROM listing_media WHERE id=?");
+                $del_listings_stmt = $con->prepare("DELETE FROM listings WHERE property_id=?");
 
-                    $delete_tenants = "delete from tenants where property_id='".$tl_property_id."'";
-                    $run_dt = mysqli_query($con, $delete_tenants);
-
-                    $delete_rns = "delete from rent_notification_status where property_id='".$tl_property_id."'";
-                    $run_rns = mysqli_query($con, $delete_rns);
-
-                    $get_landlord_listings="SELECT * FROM listings where property_id='".$tl_property_id."'";
-                    $gll_result=mysqli_query($con, $get_landlord_listings);
-                    while($row = $gll_result->fetch_assoc()){
-                        $tl_listing_id=$row['id'];
-                        $tl_file_name=$row['file_name'];
-
-                        $dir = "file_uploads/listings_media/images";    
-                        $dirHandle = opendir($dir);    
-                        while ($file = readdir($dirHandle)) {    
-                            if($file==$tl_file_name) {
-                                unlink($dir."/".$file);
-                            }
-                        }    
-                        closedir($dirHandle);
-
-                        $delete_lm = "delete from listing_media where listing_id='".$tl_listing_id."'";
-                        $run_dlm = mysqli_query($con, $delete_lm);
+                while ($prop_res && ($prow = $prop_res->fetch_assoc())) {
+                    $tl_property_id = (int)$prow['id'];
+                    if ($tl_property_id <= 0) {
+                        continue;
                     }
 
-                    $delete_listings = "delete from listings where property_id='".$tl_property_id."'";
-                    $run_dls = mysqli_query($con, $delete_listings);
+                    if ($del_tenants_stmt) {
+                        $del_tenants_stmt->bind_param('i', $tl_property_id);
+                        $del_tenants_stmt->execute();
+                    }
+                    if ($del_rns_stmt) {
+                        $del_rns_stmt->bind_param('i', $tl_property_id);
+                        $del_rns_stmt->execute();
+                    }
+
+                    if ($list_stmt) {
+                        $list_stmt->bind_param('i', $tl_property_id);
+                        $list_stmt->execute();
+                        $list_res = $list_stmt->get_result();
+                        while ($list_res && ($lrow = $list_res->fetch_assoc())) {
+                            $tl_listing_id = (int)$lrow['id'];
+                            if ($tl_listing_id <= 0 || !$media_stmt) {
+                                continue;
+                            }
+                            $media_stmt->bind_param('i', $tl_listing_id);
+                            $media_stmt->execute();
+                            $mres = $media_stmt->get_result();
+                            while ($mres && ($mrow = $mres->fetch_assoc())) {
+                                $tlm_id = (int)$mrow['id'];
+                                $tlm_file_name = (string)($mrow['file_name'] ?? '');
+                                $safe_name = $tlm_file_name !== '' ? basename($tlm_file_name) : '';
+                                $file_path = $safe_name !== '' ? ("file_uploads/listings_media/images/" . $safe_name) : '';
+                                if ($file_path !== '' && is_file($file_path)) {
+                                    @unlink($file_path);
+                                }
+                                if ($del_media_stmt && $tlm_id > 0) {
+                                    $del_media_stmt->bind_param('i', $tlm_id);
+                                    $del_media_stmt->execute();
+                                }
+                            }
+                        }
+                    }
+
+                    if ($del_listings_stmt) {
+                        $del_listings_stmt->bind_param('i', $tl_property_id);
+                        $del_listings_stmt->execute();
+                    }
                 }
 
-                $delete_properties = "delete from properties where landlord_id='".$target_id."'";
-                $run_dps = mysqli_query($con, $delete_properties);
+                if ($del_tenants_stmt) $del_tenants_stmt->close();
+                if ($del_rns_stmt) $del_rns_stmt->close();
+                if ($list_stmt) $list_stmt->close();
+                if ($media_stmt) $media_stmt->close();
+                if ($del_media_stmt) $del_media_stmt->close();
+                if ($del_listings_stmt) $del_listings_stmt->close();
+                $prop_stmt->close();
+            }
+
+            $del_props_stmt = $con->prepare("DELETE FROM properties WHERE landlord_id=?");
+            if ($del_props_stmt) {
+                $del_props_stmt->bind_param('i', $target_id);
+                $del_props_stmt->execute();
+                $del_props_stmt->close();
             }
 
             if($run_dl){
@@ -3407,15 +3695,30 @@
             }
 
             //delete artisan from DB
-            $delete_artisan = "delete from artisans where id='".$target_id."'";
-            $run_da = mysqli_query($con, $delete_artisan);
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+
+            $run_da = false;
+            $del_stmt = $con->prepare("DELETE FROM artisans WHERE id=? LIMIT 1");
+            if ($del_stmt) {
+                $del_stmt->bind_param('i', $target_id);
+                $run_da = $del_stmt->execute();
+                $del_stmt->close();
+            }
 
             //other related delete actions
-            $delete_artisan_rating = "delete from artisan_rating where artisan_id='".$target_id."'";
-            $run_dar = mysqli_query($con, $delete_artisan_rating);
+            $dar_stmt = $con->prepare("DELETE FROM artisan_rating WHERE artisan_id=?");
+            if ($dar_stmt) {
+                $dar_stmt->bind_param('i', $target_id);
+                $dar_stmt->execute();
+                $dar_stmt->close();
+            }
 
-            $delete_artisan_services = "delete from artisan_services where artisan_id='".$target_id."'";
-            $run_das = mysqli_query($con, $delete_artisan_services);
+            $das_stmt = $con->prepare("DELETE FROM artisan_services WHERE artisan_id=?");
+            if ($das_stmt) {
+                $das_stmt->bind_param('i', $target_id);
+                $das_stmt->execute();
+                $das_stmt->close();
+            }
 
             if($run_da){
                 AuditLog::log('DELETE', 'artisans', $target_id, $before_data, null, $this_user);
@@ -3475,13 +3778,24 @@
                 $stmt->close();
             }
 
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+
             //delete service type from DB
-            $delete_service_type = "delete from all_services where id='".$target_id."'";
-            $run_dst = mysqli_query($con, $delete_service_type);
+            $run_dst = false;
+            $del_stmt = $con->prepare("DELETE FROM all_services WHERE id=? LIMIT 1");
+            if ($del_stmt) {
+                $del_stmt->bind_param('i', $target_id);
+                $run_dst = $del_stmt->execute();
+                $del_stmt->close();
+            }
 
             //other related actions
-            $delete_service_artisans = "delete from artisan_services where service_id='".$target_id."'";
-            $run_dsa = mysqli_query($con, $delete_service_artisans);
+            $dsa_stmt = $con->prepare("DELETE FROM artisan_services WHERE service_id=?");
+            if ($dsa_stmt) {
+                $dsa_stmt->bind_param('i', $target_id);
+                $dsa_stmt->execute();
+                $dsa_stmt->close();
+            }
 
             if($run_dst){
                 AuditLog::log('DELETE', 'all_services', $target_id, $before_data, null, $this_user);
@@ -3509,8 +3823,9 @@
 
         //remove artisan's service
         if($target == "remove-artisan-service"){
-            $target_id = $_GET['id'];
-            $target_artisan = $_GET['artisan'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
+            $target_artisan = (int)($_GET['artisan'] ?? 0);
 
             // Audit snapshot before delete
             $before_data = null;
@@ -3528,8 +3843,15 @@
             }
 
             //remove artisan service from DB
-            $remove_artisan_service = "delete from artisan_services where service_id='".$target_id."' and artisan_id='".$target_artisan."'";
-            $run_ras = mysqli_query($con, $remove_artisan_service);
+            $run_ras = false;
+            if ($target_id > 0 && $target_artisan > 0) {
+                $ras_stmt = $con->prepare("DELETE FROM artisan_services WHERE service_id=? AND artisan_id=? LIMIT 1");
+                if ($ras_stmt) {
+                    $ras_stmt->bind_param('ii', $target_id, $target_artisan);
+                    $run_ras = $ras_stmt->execute();
+                    $ras_stmt->close();
+                }
+            }
 
             if($run_ras){
                 AuditLog::log('DELETE', 'artisan_services', $target_id_int, $before_data, null, $this_user);
@@ -3557,8 +3879,9 @@
         
         //remove assigned access
         if($target == "remove-access"){
-            $target_id = $_GET['id'];
-            $target_user = $_GET['user'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
+            $target_user = (int)($_GET['user'] ?? 0);
 
             // Audit snapshot before delete
             $before_data = null;
@@ -3575,8 +3898,15 @@
             }
 
             //remove access record from DB
-            $remove_access = "delete from access_mgt where id='".$target_id."'";
-            $run_ra = mysqli_query($con, $remove_access);
+            $run_ra = false;
+            if ($target_id > 0) {
+                $ra_stmt = $con->prepare("DELETE FROM access_mgt WHERE id=? LIMIT 1");
+                if ($ra_stmt) {
+                    $ra_stmt->bind_param('i', $target_id);
+                    $run_ra = $ra_stmt->execute();
+                    $ra_stmt->close();
+                }
+            }
 
             if($run_ra){
                 AuditLog::log('DELETE', 'access_mgt', $target_id_int, $before_data, null, $this_user);
@@ -3612,6 +3942,8 @@
                 $_SESSION['expire'] = time() + 10;
                 exit;
             }
+
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
             
             // Only admins can delete users
             if ($tu_role_id != "1") {
@@ -3629,26 +3961,36 @@
             $before_data = null;
 
             //delete users profile image
-            $get_target_user="SELECT * FROM users where id='".$target_id."'";
-            $gtu_result=mysqli_query($con, $get_target_user);
-            while($row = $gtu_result->fetch_assoc()){
-                $before_data = $row;
-                $tu_profile_picture=$row['profile_picture'];
+            $tu_profile_picture = '';
+            $stmt = $con->prepare("SELECT * FROM users WHERE id=? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param('i', $target_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $row = $res ? $res->fetch_assoc() : null;
+                if (is_array($row)) {
+                    $before_data = $row;
+                    $tu_profile_picture = (string)($row['profile_picture'] ?? '');
+                }
+                $stmt->close();
             }
-            if(!empty($tu_profile_picture)){
-                $dir = "file_uploads/users";    
-                $dirHandle = opendir($dir);    
-                while ($file = readdir($dirHandle)) {    
-                    if($file==$tu_profile_picture) {
-                        unlink($dir."/".$file);
-                    }
-                }    
-                closedir($dirHandle);
+
+            if($tu_profile_picture !== ''){
+                $safe_name = basename($tu_profile_picture);
+                $file_path = "file_uploads/users/" . $safe_name;
+                if (is_file($file_path)) {
+                    @unlink($file_path);
+                }
             }
 
             //delete user from DB
-            $delete_user = "delete from users where id='".$target_id."'";
-            $run_du = mysqli_query($con, $delete_user);
+            $run_du = false;
+            $del_stmt = $con->prepare("DELETE FROM users WHERE id=? LIMIT 1");
+            if ($del_stmt) {
+                $del_stmt->bind_param('i', $target_id);
+                $run_du = $del_stmt->execute();
+                $del_stmt->close();
+            }
 
             //other related delete actions
 
@@ -3682,10 +4024,18 @@
 
         //suspend user
         if($target == "suspend-user"){
-            $target_id = $_GET['id'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
 
-            $suspend_user = "update users set dashboard_access='2' where id='".$target_id."'";
-            $run_su = mysqli_query($con, $suspend_user);
+            $run_su = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE users SET dashboard_access='2' WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id);
+                    $run_su = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_su){
                 $response = "success";
@@ -3721,10 +4071,18 @@
 
         //activate user
         if($target == "activate-user"){
-            $target_id = $_GET['id'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
 
-            $activate_user = "update users set dashboard_access='1' where id='".$target_id."'";
-            $run_au = mysqli_query($con, $activate_user);
+            $run_au = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE users SET dashboard_access='1' WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id);
+                    $run_au = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_au){
                 $response = "success";
@@ -3760,10 +4118,16 @@
         
         //mark new notifications as read
         if($target == "mark-notifications-as-read"){
-            $target_id = $this_user;
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)$this_user;
 
-            $update_notification_statuses = "update notifications set status='1' where target='".$target_id."' and status='0'";
-            $run_uns = mysqli_query($con, $update_notification_statuses);
+            $run_uns = false;
+            $stmt = $con->prepare("UPDATE notifications SET status='1' WHERE target=? AND status='0'");
+            if ($stmt) {
+                $stmt->bind_param('i', $target_id);
+                $run_uns = $stmt->execute();
+                $stmt->close();
+            }
 
             if($run_uns){
                 $response = "success";
@@ -3790,10 +4154,18 @@
         
         //Enable tenant rent notifications
         if($target == "enable-rent-notifications"){
-            $target_id = $_GET['id'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
 
-            $update_rent_notification = "update tenants set notification_status='1' where id='".$target_id."'";
-            $run_urn = mysqli_query($con, $update_rent_notification);
+            $run_urn = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE tenants SET notification_status='1' WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id);
+                    $run_urn = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_urn){
                 $response = "success";
@@ -3820,10 +4192,18 @@
 
         //Disable tenant rent notifications
         if($target == "disable-rent-notifications"){
-            $target_id = $_GET['id'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
 
-            $update_rent_notification = "update tenants set notification_status='0' where id='".$target_id."'";
-            $run_urn = mysqli_query($con, $update_rent_notification);
+            $run_urn = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE tenants SET notification_status='0' WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id);
+                    $run_urn = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_urn){
                 $response = "success";
@@ -3850,10 +4230,18 @@
 
         //Change tenant to relocated
         if($target == "tenant-relocated"){
-            $target_id = $_GET['id'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
 
-            $update_occupant_status = "update tenants set occupant_status='0' where id='".$target_id."'";
-            $run_uos = mysqli_query($con, $update_occupant_status);
+            $run_uos = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE tenants SET occupant_status='0' WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id);
+                    $run_uos = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_uos){
                 $response = "success";
@@ -3880,10 +4268,18 @@
 
         // update sale/rent status
         if($target == "update-listing-status"){
-            $target_id = $_GET['id'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
 
-            $update_listing_status = "update listings set status='0', visibility_status='0' where id='".$target_id."'";
-            $run_uls = mysqli_query($con, $update_listing_status);
+            $run_uls = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE listings SET status='0', visibility_status='0' WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id);
+                    $run_uls = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_uls){
                 $response = "success";
@@ -3910,10 +4306,18 @@
 
         // hide listing
         if($target == "hide-listing"){
-            $target_id = $_GET['id'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
 
-            $update_visibility_status = "update listings set visibility_status='0' where id='".$target_id."'";
-            $run_uvs = mysqli_query($con, $update_visibility_status);
+            $run_uvs = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE listings SET visibility_status='0' WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id);
+                    $run_uvs = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_uvs){
                 $response = "success";
@@ -3940,10 +4344,18 @@
 
         // show listing
         if($target == "show-listing"){
-            $target_id = $_GET['id'];
+            CSRFProtection::checkToken($_GET['csrf_token'] ?? '', 'Invalid request.');
+            $target_id = (int)($_GET['id'] ?? 0);
 
-            $update_visibility_status = "update listings set visibility_status='1' where id='".$target_id."'";
-            $run_uvs = mysqli_query($con, $update_visibility_status);
+            $run_uvs = false;
+            if ($target_id > 0) {
+                $stmt = $con->prepare("UPDATE listings SET visibility_status='1' WHERE id=? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $target_id);
+                    $run_uvs = $stmt->execute();
+                    $stmt->close();
+                }
+            }
 
             if($run_uvs){
                 $response = "success";

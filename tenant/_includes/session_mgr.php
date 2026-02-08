@@ -9,23 +9,35 @@
     }else{
         $this_tenant = $_SESSION['this_tenant'];
 
-        $get_user = "select * from tenants where id='".$this_tenant."'";
-        $gu_result = $con->query($get_user);
-        while($row = $gu_result->fetch_assoc())
-        {
-            $tu_id=$row['tenant_id'];
-            $tu_first_name=$row['first_name'];
-            $tu_last_name=$row['last_name'];
-            $tu_property_id=$row['property_id'];
-            $tu_flat_number=$row['flat_number'];
-            $tu_apartment_type=$row['apartment_type'];
-            $tu_profile_picture=$row['profile_picture'];
-            $this_l_picture=$row['profile_picture'];
-            $tu_email=$row['email'];
-            $tu_phone_number=$row['phone'];
-            $tu_password=$row['password'];
-            $tu_password_status = isset($row['password_status']) ? (int)$row['password_status'] : 0;
+        $row = null;
+        $user_stmt = $con->prepare("SELECT tenant_id, first_name, last_name, property_id, flat_number, apartment_type, profile_picture, email, phone, password, password_status FROM tenants WHERE id=? LIMIT 1");
+        if ($user_stmt) {
+            $id = (int)$this_tenant;
+            $user_stmt->bind_param('i', $id);
+            $user_stmt->execute();
+            $res = $user_stmt->get_result();
+            $row = $res ? $res->fetch_assoc() : null;
+            $user_stmt->close();
         }
+
+        if (!$row) {
+            unset($_SESSION['this_tenant']);
+            echo "<script>window.location='login.php';</script>";
+            exit;
+        }
+
+        $tu_id = $row['tenant_id'];
+        $tu_first_name = $row['first_name'];
+        $tu_last_name = $row['last_name'];
+        $tu_property_id = $row['property_id'];
+        $tu_flat_number = $row['flat_number'];
+        $tu_apartment_type = $row['apartment_type'];
+        $tu_profile_picture = $row['profile_picture'];
+        $this_l_picture = $row['profile_picture'];
+        $tu_email = $row['email'];
+        $tu_phone_number = $row['phone'];
+        $tu_password = $row['password'];
+        $tu_password_status = isset($row['password_status']) ? (int)$row['password_status'] : 0;
         // if($tu_apartment_type == "Bedsitter"){
         //     $apartmenttype = "Bedsitter";
         // }else if($tu_apartment_type == "self"){

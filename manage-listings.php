@@ -135,14 +135,14 @@
 														<span class='badge badge-danger light border-0'>Hidden</span>
 													";
 													$visibility_link = "
-														<a href='?action=show-listing&id=".$_id."' class='dropdown-item'>Show Listing</a>
+														<a href='?action=show-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='dropdown-item'>Show Listing</a>
 													";
 												}else if($_visibility_status == "1"){
 													$visibility_status = "
 														<span class='badge badge-success light border-0'>Visible</span>
 													";
 													$visibility_link = "
-														<a href='?action=hide-listing&id=".$_id."' class='dropdown-item'>Hide Listing</a>
+														<a href='?action=hide-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' class='dropdown-item'>Hide Listing</a>
 													";
 												}
 

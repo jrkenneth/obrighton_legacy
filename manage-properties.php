@@ -14,6 +14,10 @@
 	$rent_option = "";
 	$sale_option = "";
 	$living__spaces = "";
+	$first_name = "";
+	$last_name = "";
+	$email_address = "";
+	$contact_number = "";
 
 	include("_include/header.php");
 

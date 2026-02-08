@@ -762,7 +762,7 @@
                                 $listing_status = "
                                     <span class='badge badge-warning light border-0'>Pending</span>
                                     <div style='width: 100%; height: 10px;'></div>
-                                    <a href='manage-listings.php?action=update-listing-status&id=".$_id."' style='color: #327da8; font-weight: bold;'>Mark as Completed</a>
+                                    <a href='manage-listings.php?action=update-listing-status&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8; font-weight: bold;'>Mark as Completed</a>
                                 ";
                                 $action_buttons = "
                                     <a href='manage-listings.php?target=update-listing&id=".$_id."' class='btn btn-secondary'>Edit</a>
@@ -774,13 +774,13 @@
                                 $visibility_status = "
                                     <span class='badge badge-danger light border-0'>Hidden</span>
                                     <div style='width: 100%; height: 10px;'></div>
-                                    <a href='manage-listings.php?action=show-listing&id=".$_id."' style='color: #327da8; font-weight: bold;'>Show Listing</a>
+                                    <a href='manage-listings.php?action=show-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8; font-weight: bold;'>Show Listing</a>
                                 ";
                             }else if($_visibility_status == "1"){
                                 $visibility_status = "
                                     <span class='badge badge-success light border-0'>Visible</span>
                                     <div style='width: 100%; height: 10px;'></div>
-                                    <a href='manage-listings.php?action=hide-listing&id=".$_id."' style='color: #327da8; font-weight: bold;'>Hide Listing</a>
+                                    <a href='manage-listings.php?action=hide-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8; font-weight: bold;'>Hide Listing</a>
                                 ";
                             }
 
@@ -968,7 +968,7 @@
                                 $this_os = "
                                     <span class='badge badge-danger light border-0'>Occupied</span>
                                     <div style='width: 100%; height: 15px;'></div>
-                                    <a href='manage-tenants.php?action=tenant-relocated&id=".$_id."' style='color: #327da8;  font-weight: bold;'>Update to Relocated</a>
+                                    <a href='manage-tenants.php?action=tenant-relocated&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8;  font-weight: bold;'>Update to Relocated</a>
                                     <div style='width: 100%; height: 10px;'></div>
                                     <a href='manage-listings.php?add-listing=true&tenant-id=".$_id."&type=Rent&source=tenant' style='color: #327da8;  font-weight: bold;'>Update to Relocated & List Vacancy</a>
                                 ";
@@ -977,13 +977,13 @@
                                     $this_ns = "
                                         <span class='badge badge-danger light border-0'>Disabled</span>
                                         <div style='width: 100%; height: 10px;'></div>
-                                        <a href='manage-tenants.php?action=enable-rent-notifications&id=".$_id."' style='color: #327da8;  font-weight: bold;'>Enable Notifications</a>
+                                        <a href='manage-tenants.php?action=enable-rent-notifications&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8;  font-weight: bold;'>Enable Notifications</a>
                                     ";
                                 }else if($_notification_status == "1"){
                                     $this_ns = "
                                         <span class='badge badge-success light border-0'>Enabled</span>
                                         <div style='width: 100%; height: 10px;'></div>
-                                        <a href='manage-tenants.php?action=disable-rent-notifications&id=".$_id."' style='color: indianred;  font-weight: bold;'>Disable Notifications</a>
+                                        <a href='manage-tenants.php?action=disable-rent-notifications&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: indianred;  font-weight: bold;'>Disable Notifications</a>
                                     ";
                                 }
                             }else if($_occupant_status == "0"){
@@ -1871,7 +1871,7 @@
                                 $listing_status = "
                                     <span class='badge badge-warning light border-0'>Pending</span>
                                     <div style='width: 100%; height: 10px;'></div>
-                                    <a href='manage-listings.php?action=update-listing-status&id=".$_id."' style='color: #327da8; font-weight: bold;'>Mark as Completed</a>
+                                    <a href='manage-listings.php?action=update-listing-status&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8; font-weight: bold;'>Mark as Completed</a>
                                 ";
                                 $action_buttons = "
                                     <a href='manage-listings.php?target=update-listing&id=".$_id."' class='btn btn-secondary'>Edit</a>
@@ -1883,13 +1883,13 @@
                                 $visibility_status = "
                                     <span class='badge badge-danger light border-0'>Hidden</span>
                                     <div style='width: 100%; height: 10px;'></div>
-                                    <a href='manage-listings.php?action=show-listing&id=".$_id."' style='color: #327da8; font-weight: bold;'>Show Listing</a>
+                                    <a href='manage-listings.php?action=show-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8; font-weight: bold;'>Show Listing</a>
                                 ";
                             }else if($_visibility_status == "1"){
                                 $visibility_status = "
                                     <span class='badge badge-success light border-0'>Visible</span>
                                     <div style='width: 100%; height: 10px;'></div>
-                                    <a href='manage-listings.php?action=hide-listing&id=".$_id."' style='color: #327da8; font-weight: bold;'>Hide Listing</a>
+                                    <a href='manage-listings.php?action=hide-listing&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8; font-weight: bold;'>Hide Listing</a>
                                 ";
                             }
 
@@ -2081,7 +2081,7 @@
                                 $this_os = "
                                     <span class='badge badge-danger light border-0'>Occupied</span>
                                     <div style='width: 100%; height: 15px;'></div>
-                                    <a href='manage-tenants.php?action=tenant-relocated&id=".$_id."' style='color: #327da8;  font-weight: bold;'>Update to Relocated</a>
+                                    <a href='manage-tenants.php?action=tenant-relocated&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8;  font-weight: bold;'>Update to Relocated</a>
                                     <div style='width: 100%; height: 10px;'></div>
                                     <a href='manage-listings.php?add-listing=true&tenant-id=".$_id."&type=Rent&source=tenant' style='color: #327da8;  font-weight: bold;'>Update to Relocated & List Vacancy</a>
                                 ";
@@ -2090,13 +2090,13 @@
                                     $this_ns = "
                                         <span class='badge badge-danger light border-0'>Disabled</span>
                                         <div style='width: 100%; height: 10px;'></div>
-                                        <a href='manage-tenants.php?action=enable-rent-notifications&id=".$_id."' style='color: #327da8;  font-weight: bold;'>Enable Notifications</a>
+                                        <a href='manage-tenants.php?action=enable-rent-notifications&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: #327da8;  font-weight: bold;'>Enable Notifications</a>
                                     ";
                                 }else if($_notification_status == "1"){
                                     $this_ns = "
                                         <span class='badge badge-success light border-0'>Enabled</span>
                                         <div style='width: 100%; height: 10px;'></div>
-                                        <a href='manage-tenants.php?action=disable-rent-notifications&id=".$_id."' style='color: indianred;  font-weight: bold;'>Disable Notifications</a>
+                                        <a href='manage-tenants.php?action=disable-rent-notifications&id=".$_id."&csrf_token=".urlencode(CSRFProtection::getToken())."' style='color: indianred;  font-weight: bold;'>Disable Notifications</a>
                                     ";
                                 }
                             }else if($_occupant_status == "0"){

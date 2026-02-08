@@ -140,7 +140,7 @@
 																		while($row = $cps_result->fetch_assoc()){
 																			$am_id=$row['id'];
 																		}
-																		$select_value = "<a class='text-danger' href='?action=remove-access&id=".$am_id."&user=".$_GET['id']."'><i class='fa fa-ban'></i> Remove Access</a>";
+																		$select_value = "<a class='text-danger' href='?action=remove-access&id=".$am_id."&user=".$_GET['id']."&csrf_token=".urlencode(CSRFProtection::getToken())."'><i class='fa fa-ban'></i> Remove Access</a>";
 																	}
 
 																	echo "
@@ -212,7 +212,7 @@
 																			while($row = $cls_result->fetch_assoc()){
 																				$am_id=$row['id'];
 																			}
-																			$select_value = "<a class='text-danger' href='?action=remove-access&id=".$am_id."&user=".$_GET['id']."'><i class='fa fa-ban'></i> Remove Access</a>";
+																			$select_value = "<a class='text-danger' href='?action=remove-access&id=".$am_id."&user=".$_GET['id']."&csrf_token=".urlencode(CSRFProtection::getToken())."'><i class='fa fa-ban'></i> Remove Access</a>";
 																		}
 	
 																		echo "
@@ -298,7 +298,7 @@
 																		while($row = $cts_result->fetch_assoc()){
 																			$am_id=$row['id'];
 																		}
-																		$select_value = "<a class='text-danger' href='?action=remove-access&id=".$am_id."&user=".$_GET['id']."'><i class='fa fa-ban'></i> Remove Access</a>";
+																		$select_value = "<a class='text-danger' href='?action=remove-access&id=".$am_id."&user=".$_GET['id']."&csrf_token=".urlencode(CSRFProtection::getToken())."'><i class='fa fa-ban'></i> Remove Access</a>";
 																	}
 
 																	echo "
@@ -383,7 +383,7 @@
 																			while($row = $cas_result->fetch_assoc()){
 																				$am_id=$row['id'];
 																			}
-																			$select_value = "<a class='text-danger' href='?action=remove-access&id=".$am_id."&user=".$_GET['id']."'><i class='fa fa-ban'></i> Remove Access</a>";
+																			$select_value = "<a class='text-danger' href='?action=remove-access&id=".$am_id."&user=".$_GET['id']."&csrf_token=".urlencode(CSRFProtection::getToken())."'><i class='fa fa-ban'></i> Remove Access</a>";
 																		}
 
 																		echo "

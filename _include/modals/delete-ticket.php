@@ -12,7 +12,7 @@
             </div>
             <div class='modal-footer'>
                 <button type='button' class='btn btn-secondary light' data-bs-dismiss='modal'>Cancel</button>
-                <a href='<?php echo $ticket_page.".php?".$ticket_target_param."action=".$ticket_target_name."&id=".$ticket_target_id; ?>'class='btn btn-danger'>Continue</a>
+                <a href='<?php echo $ticket_page.".php?".$ticket_target_param."action=".$ticket_target_name."&id=".$ticket_target_id."&csrf_token=".urlencode(CSRFProtection::getToken()); ?>'class='btn btn-danger'>Continue</a>
             </div>
         </div>
     </div>

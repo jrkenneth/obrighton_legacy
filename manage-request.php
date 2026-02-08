@@ -1,6 +1,7 @@
 <?php
 	
 	include("_include/dbconnect.php");
+	require_once(__DIR__ . '/_include/CSRFProtection.php');
 	date_default_timezone_set("Africa/Lagos");
 
 	if(isset($_GET['id'])){
@@ -29,7 +30,7 @@
 					<span class='badge badge-success light border-0'>Open</span>
 				";
 				$close_ticket_btn = "
-					<a href='manage-request.php?id=".$ticket_id."&action=close-ticket&source=manage-ticket' title='Close Conversation' class='btn btn-secondary btn-sm'>Close Conversation</a>
+					<a href='manage-request.php?id=".$ticket_id."&action=close-ticket&source=manage-ticket&csrf_token=".urlencode(CSRFProtection::getToken())."' title='Close Conversation' class='btn btn-secondary btn-sm'>Close Conversation</a>
 				";
 				$reply_form_visibility = "display: block;";
 			}else if($_status == "1"){

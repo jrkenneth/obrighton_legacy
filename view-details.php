@@ -92,7 +92,7 @@
 					<div class="mb-3"><strong>Email:</strong> <?php echo htmlspecialchars($entity_temp_email, ENT_QUOTES, 'UTF-8'); ?></div>
 					<div class="input-group">
 						<input type="text" class="form-control" id="tempEntityPasswordValue" value="<?php echo htmlspecialchars($entity_temp_password, ENT_QUOTES, 'UTF-8'); ?>" readonly>
-						<button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('tempEntityPasswordValue').value)">Copy</button>
+						<button class="btn btn-outline-secondary" type="button" onclick="obCopyToClipboard('tempEntityPasswordValue', this)">Copy</button>
 					</div>
 				</div>
 				<div class="modal-footer">
@@ -102,6 +102,47 @@
 		</div>
 	</div>
 	<script>
+		function obCopyToClipboard(inputId, btn){
+			var inputEl = document.getElementById(inputId);
+			if(!inputEl){
+				return;
+			}
+
+			var textToCopy = inputEl.value || '';
+			var originalText = btn ? (btn.innerText || btn.textContent || 'Copy') : 'Copy';
+
+			function showCopied(ok){
+				if(!btn){
+					return;
+				}
+				btn.disabled = true;
+				btn.innerText = ok ? 'Copied!' : 'Failed';
+				setTimeout(function(){
+					btn.disabled = false;
+					btn.innerText = originalText;
+				}, 1200);
+			}
+
+			if(navigator.clipboard && typeof navigator.clipboard.writeText === 'function'){
+				navigator.clipboard.writeText(textToCopy).then(function(){
+					showCopied(true);
+				}).catch(function(){
+					showCopied(false);
+				});
+				return;
+			}
+
+			// Fallback for older browsers
+			try {
+				inputEl.focus();
+				inputEl.select();
+				var ok = document.execCommand('copy');
+				showCopied(!!ok);
+			} catch (e) {
+				showCopied(false);
+			}
+		}
+
 		document.addEventListener('DOMContentLoaded', function(){
 			var modalEl = document.getElementById('tempEntityPasswordModal');
 			if(modalEl){

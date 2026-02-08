@@ -39,10 +39,17 @@
                                         </thead>
 										<tbody>
 											<?php
-												$retrieve_all_notifications = "select * from rent_notification_status order by id asc";
-												$ran_result = $con->query($retrieve_all_notifications);
-												while($row = $ran_result->fetch_assoc())
-												{
+												$ran_result = false;
+												try {
+													$retrieve_all_notifications = "select * from rent_notification_status order by id asc";
+													$ran_result = $con->query($retrieve_all_notifications);
+												} catch (mysqli_sql_exception $e) {
+													$ran_result = false;
+												}
+
+												if($ran_result){
+													while($row = $ran_result->fetch_assoc())
+													{
 													$_id=$row['id'];
 													$_property_id=$row['property_id'];
 													$_tenant_id=$row['tenant_id'];
@@ -117,6 +124,9 @@
 														</tr>
 													";
 												}
+											}else{
+												echo "<tr><td colspan='7'><span class='badge badge-warning light border-0'>Rent notifications table not found in this database.</span></td></tr>";
+											}
 											?>
 										</tbody>
 										

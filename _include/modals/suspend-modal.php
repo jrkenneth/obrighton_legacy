@@ -12,7 +12,7 @@
             </div>
             <div class='modal-footer'>
                 <button type='button' class='btn btn-secondary light' data-bs-dismiss='modal'>Cancel</button>
-                <a href='<?php echo $suspension_page.".php?".$suspension_target_param."action=".$suspension_target_name."&id=".$suspension_target_id."&source=".$suspension_page; ?>'class='btn btn-warning'>Continue</a>
+                <a href='<?php echo $suspension_page.".php?".$suspension_target_param."action=".$suspension_target_name."&id=".$suspension_target_id."&source=".$suspension_page."&csrf_token=".urlencode(CSRFProtection::getToken()); ?>'class='btn btn-warning'>Continue</a>
             </div>
         </div>
     </div>
