@@ -1,6 +1,18 @@
 <?php
 include("_include/dbconnect.php");
 
+if (!function_exists('ob_safe_redirect')) {
+    function ob_safe_redirect(string $location): void
+    {
+        if (!headers_sent()) {
+            header('Location: ' . $location);
+        } else {
+            echo "<script>window.location='" . htmlspecialchars($location, ENT_QUOTES, 'UTF-8') . "';</script>";
+        }
+        exit;
+    }
+}
+
 // Load security libraries for CSRF protection
 require_once '_include/DatabaseHelper.php';
 require_once '_include/InputValidator.php';
@@ -15,11 +27,11 @@ require_once '_include/AuditLog.php';
 
 	if(isset($_GET['set-password'])){
 		$_SESSION['user_id'] = $_GET['user-id'];
-		echo "<script>window.location='set-password.php';</script>";
+		ob_safe_redirect('set-password.php');
 	}
 
 	if(isset($_SESSION['this_user'])){
-		echo "<script>window.location='index.php';</script>";
+		ob_safe_redirect('index.php');
 	}
 
 	$user = "";	

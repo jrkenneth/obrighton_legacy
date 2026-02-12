@@ -1,4 +1,15 @@
 <?php
+    if (!function_exists('ob_safe_redirect')) {
+        function ob_safe_redirect(string $location): void
+        {
+            if (!headers_sent()) {
+                header('Location: ' . $location);
+            } else {
+                echo "<script>window.location='" . htmlspecialchars($location, ENT_QUOTES, 'UTF-8') . "';</script>";
+            }
+            exit;
+        }
+    }
     
     if(!isset($con)){
         require_once '_include/dbconnect.php';
@@ -38,14 +49,13 @@
     }
        
     if(!isset($_SESSION['this_user'])){
-        echo "<script>window.location='login.php';</script>";	
+        ob_safe_redirect('login.php');
     }else{	
         $this_user = InputValidator::validateInteger($_SESSION['this_user']);
         
         if (!$this_user) {
             unset($_SESSION['this_user']);
-            echo "<script>window.location='login.php';</script>";
-            exit;
+            ob_safe_redirect('login.php');
         }
 
         // SECURITY: Use prepared statement to prevent SQL injection
@@ -77,22 +87,20 @@
             // User not found, force logout
             $stmt->close();
             unset($_SESSION['this_user']);
-            echo "<script>window.location='login.php';</script>";
-            exit;
+            ob_safe_redirect('login.php');
         }
         $stmt->close();
 
         if($tu_dashboard_access != '1'){
             unset($_SESSION['this_user']);
-            echo "<script>window.location='login.php';</script>";
+            ob_safe_redirect('login.php');
         }
 
         // Force password change when using a temporary password
         $current_page = basename($_SERVER['PHP_SELF'] ?? '');
         if ((int)$tu_password_status === 0 && $current_page !== 'change-password.php') {
             $_SESSION['force_password_change'] = true;
-            echo "<script>window.location='change-password.php';</script>";
-            exit;
+            ob_safe_redirect('change-password.php');
         }
 
         if($tu_role_id == "3"){

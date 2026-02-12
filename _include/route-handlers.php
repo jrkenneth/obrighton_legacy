@@ -2,6 +2,18 @@
 
 require_once(__DIR__ . '/CSRFProtection.php');
 
+if (!function_exists('ob_safe_redirect')) {
+    function ob_safe_redirect(string $location): void
+    {
+        if (!headers_sent()) {
+            header('Location: ' . $location);
+        } else {
+            echo "<script>window.location='" . htmlspecialchars($location, ENT_QUOTES, 'UTF-8') . "';</script>";
+        }
+        exit;
+    }
+}
+
 if (!function_exists('ob_table_exists')) {
     function ob_table_exists(mysqli $con, string $tableName): bool
     {
@@ -117,7 +129,13 @@ if (!function_exists('ob_table_exists')) {
     if(isset($_GET['logout'])){
         unset($_SESSION['this_user']);
         unset($_SESSION['redirect_url']);
-        echo "<script>window.location='login.php';</script>";
+        $_SESSION = array();
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], (bool)$params['secure'], (bool)$params['httponly']);
+        }
+        session_destroy();
+        ob_safe_redirect('login.php');
     }
 
     // Backwards-compatible migration: ensure `users.password_status` exists
