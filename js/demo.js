@@ -204,8 +204,19 @@ function deleteAllCookie(reload = true)
 		themeSettings = eval('dzThemeSet'+theme);
 		dzSettingsOptions = themeSettings; /* For Screen Resize */
 		new dzSettings(themeSettings);
+		applyMobileSidebarDefaults();
 		
 		setThemeInCookie(themeSettings);
+	}
+
+	function applyMobileSidebarDefaults()
+	{
+		if(window.innerWidth <= 767){
+			dzSettingsOptions.sidebarStyle = "overlay";
+			new dzSettings(dzSettingsOptions);
+			jQuery('#main-wrapper').removeClass('menu-toggle');
+			jQuery('.hamburger').removeClass('is-active');
+		}
 	}
 	
 	function setThemeInCookie(themeSettings)
@@ -241,6 +252,7 @@ function deleteAllCookie(reload = true)
 			//console.log(themeOptionArr);
 			dzSettingsOptions = themeOptionArr;
 			new dzSettings(dzSettingsOptions);
+			applyMobileSidebarDefaults();
 			
 			setThemeLogo();
 		}
@@ -270,6 +282,7 @@ function deleteAllCookie(reload = true)
 		
 		/* Set Theme On Page From Cookie */
 		setThemeOptionOnPage();
+		applyMobileSidebarDefaults();
 	});
 	
 

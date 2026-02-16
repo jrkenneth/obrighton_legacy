@@ -157,18 +157,29 @@
 			#customer-tbl tbody tr td p{
 				text-wrap: wrap;
 			}
-			.table-striped {
+			.entity-details-table {
 				table-layout: fixed; 
 				width: 100%;
 			}
-			.table-striped td:first-child { 
+			.entity-details-table td:first-child { 
 				width: 250px; 
 				text-align: right;
 				padding-right: 50px;
 			}
-			td{
+			.entity-details-table td{
 				white-space: normal !important; 
-  				word-wrap: break-word;  
+  				word-wrap: break-word;
+				word-break: break-word;
+			}
+			@media (max-width: 767.98px){
+				.entity-details-table{
+					table-layout: auto;
+				}
+				.entity-details-table td:first-child{
+					width: 40%;
+					text-align: left;
+					padding-right: 12px;
+				}
 			}
 		</style>
 		<!--**********************************
@@ -178,7 +189,38 @@
         <!--**********************************
             Content body end
         ***********************************-->
-		
+		<script>
+			(function() {
+				function enforceMobileSidebarClosedOnViewDetails() {
+					if (window.innerWidth <= 991.98) {
+						document.body.setAttribute('data-sidebar-style', 'overlay');
+						var mainWrapper = document.getElementById('main-wrapper');
+						if (mainWrapper) {
+							mainWrapper.classList.remove('menu-toggle');
+						}
+						var hamburger = document.querySelector('.hamburger');
+						if (hamburger) {
+							hamburger.classList.remove('is-active');
+						}
+					}
+				}
+
+				document.addEventListener('DOMContentLoaded', enforceMobileSidebarClosedOnViewDetails);
+				window.addEventListener('load', function() {
+					enforceMobileSidebarClosedOnViewDetails();
+					setTimeout(enforceMobileSidebarClosedOnViewDetails, 120);
+					setTimeout(enforceMobileSidebarClosedOnViewDetails, 500);
+					setTimeout(enforceMobileSidebarClosedOnViewDetails, 1000);
+					var enforceEnd = Date.now() + 1800;
+					var enforceTimer = setInterval(function() {
+						enforceMobileSidebarClosedOnViewDetails();
+						if (Date.now() > enforceEnd) {
+							clearInterval(enforceTimer);
+						}
+					}, 120);
+				});
+			})();
+		</script>
 <?php
 	include("_include/footer.php");
 ?>

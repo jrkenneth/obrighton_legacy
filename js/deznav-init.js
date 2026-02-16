@@ -3,6 +3,10 @@
 
 var dzSettingsOptions = {};
 
+function getResponsiveSidebarStyle() {
+	return window.innerWidth <= 767 ? "overlay" : "full";
+}
+
 function getUrlParams(dParam) 
 	{
 		var dPageURL = window.location.search.substring(1),
@@ -40,7 +44,7 @@ function getUrlParams(dParam)
 		headerBg: "color_4",
 		navheaderBg: "color_4",
 		sidebarBg: "color_1",
-		sidebarStyle: "full",
+		sidebarStyle: getResponsiveSidebarStyle(),
 		sidebarPosition: "fixed",
 		headerPosition: "fixed",
 		containerLayout: "full",
@@ -54,7 +58,11 @@ function getUrlParams(dParam)
 	jQuery(window).on('resize',function(){
         /*Check container layout on resize */
 		///alert(dzSettingsOptions.primary);
-        dzSettingsOptions.containerLayout = $('#container_layout').val();
+		var selectedContainerLayout = $('#container_layout').val();
+		if(selectedContainerLayout !== undefined && selectedContainerLayout !== null && selectedContainerLayout !== ''){
+        	dzSettingsOptions.containerLayout = selectedContainerLayout;
+		}
+		dzSettingsOptions.sidebarStyle = getResponsiveSidebarStyle();
         /*Check container layout on resize END */
         
 		new dzSettings(dzSettingsOptions); 

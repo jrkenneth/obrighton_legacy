@@ -145,8 +145,9 @@
             <div class="col-xl-8 col-lg-9">
                 <div class="card" style="height: auto;">
                     <div class='card-body'>
-                        <table class="table table-striped" style="border: 1px solid lightgrey;">
-                            <tbody>
+                        <div class="table-responsive">
+                            <table class="table table-striped entity-details-table" style="border: 1px solid lightgrey;">
+                                <tbody>
                                 <tr>
                                     <td style="font-weight: bold;">
                                         Full Name:
@@ -213,8 +214,9 @@
                                         ?>
                                     </td>
                                 </tr>
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -955,8 +957,9 @@
             <div class="col-xl-9 col-lg-9">
                 <div class="card" style="height: auto;">
                     <div class='card-body'>
-                        <table class="table table-striped" style="border: 1px solid lightgrey;">
-                            <tbody>
+                        <div class="table-responsive">
+                            <table class="table table-striped entity-details-table" style="border: 1px solid lightgrey;">
+                                <tbody>
                                 <tr>
                                     <td style="font-weight: bold;">
                                         Title:
@@ -1055,8 +1058,9 @@
                                         ?>
                                     </td>
                                 </tr>
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1546,8 +1550,9 @@
             <div class="col-xl-8 col-lg-9">
                 <div class="card" style="height: auto;">
                     <div class='card-body'>
-                        <table class="table table-striped" style="border: 1px solid lightgrey;">
-                            <tbody>
+                        <div class="table-responsive">
+                            <table class="table table-striped entity-details-table" style="border: 1px solid lightgrey;">
+                                <tbody>
                                 <tr>
                                     <td style="font-weight: bold;">
                                         Full Name:
@@ -1674,8 +1679,9 @@
                                         ?>
                                     </td>
                                 </tr>
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

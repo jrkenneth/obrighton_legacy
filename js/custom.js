@@ -3,6 +3,14 @@ var W3Crm = function(){
 	/* Search Bar ============ */
 	var screenWidth = $( window ).width();
 	var screenHeight = $( window ).height();
+
+	var enforceMobileSidebarClosed = function() {
+		if (window.innerWidth <= 767) {
+			jQuery('body').attr('data-sidebar-style', 'overlay');
+			jQuery('#main-wrapper').removeClass('menu-toggle');
+			jQuery('.hamburger').removeClass('is-active');
+		}
+	}
 	
 	
 	var handleSelectPicker = function(){
@@ -675,18 +683,23 @@ var W3Crm = function(){
 			handlePageOnScroll();
 			handleImageSelect();
 			tagify();
+			enforceMobileSidebarClosed();
 			// masonryBox();
 		},
 
 		
 		load:function(){
 			handlePreloader();
+			// Re-apply after all scripts/theme cookies have run.
+			setTimeout(enforceMobileSidebarClosed, 50);
+			setTimeout(enforceMobileSidebarClosed, 300);
 			//handleNiceSelect();
 			masonryBox();
 		},
 		
 		resize:function(){
 			vHeight();
+			enforceMobileSidebarClosed();
 			
 		},
 		
