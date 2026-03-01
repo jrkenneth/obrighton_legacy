@@ -22,29 +22,18 @@ require_once(__DIR__ . '/../../_include/CSRFProtection.php');
 
     //Pending Payments count
     $pp_count = 0;
-    $retrieve_tenant_payments = "select * from payment_history where paid_amount IS NULL";
-    $rtp_result = $con->query($retrieve_tenant_payments);
-    while($row = $rtp_result->fetch_assoc())
-    {
-        $_tenant_id=$row['tenant_id'];
-
-        $retrieve_this_tenant = "select * from tenants where id='".$_tenant_id."'";
-        $rtt_result = $con->query($retrieve_this_tenant);
-        while($row = $rtt_result->fetch_assoc())
-        {
-            $_property_id=$row['property_id'];
-        }
-
-        $get_this_property = "select * from properties where id='".$_property_id."'";
-        $gtp_result = $con->query($get_this_property);
-        while($row = $gtp_result->fetch_assoc())
-        {
-            $tp_lid=$row['landlord_id'];
-        }
-
-        if($tp_lid == $this_landlord){
-            $pp_count = $pp_count + 1;
-        }
+    $pending_payments_count_query = "
+        SELECT COUNT(*) AS total
+        FROM payment_history ph
+        INNER JOIN tenants t ON ph.tenant_id = t.id
+        INNER JOIN properties p ON t.property_id = p.id
+        WHERE ph.paid_amount IS NULL
+          AND p.landlord_id = '".$this_landlord."'
+          AND t.occupant_status = '1'
+    ";
+    $pp_result = $con->query($pending_payments_count_query);
+    if($pp_result && $pp_row = $pp_result->fetch_assoc()){
+        $pp_count = (int)$pp_row['total'];
     }
 
     //Open Requests count
@@ -887,4 +876,3 @@ require_once(__DIR__ . '/../../_include/CSRFProtection.php');
     }
 
 ?>
-

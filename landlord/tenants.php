@@ -16,10 +16,11 @@
 						</thead>
 						<tbody>
 							<?php
-								$retrieve_all_tenants = "select * from tenants t JOIN properties p on t.property_id=p.id where p.landlord_id='".$this_landlord."' order by t.id asc";
+								$retrieve_all_tenants = "select t.*, p.title as property_title from tenants t JOIN properties p on t.property_id=p.id where p.landlord_id='".$this_landlord."' and t.occupant_status='1' order by t.id asc";
 								$rat_result = $con->query($retrieve_all_tenants);
 								while($row = $rat_result->fetch_assoc())
 								{
+									$_id=$row['id'];
 									$_tenant_id=$row['tenant_id'];
                   $_flat_number=$row['flat_number'];
                   $_first_name=$row['first_name'];
@@ -31,14 +32,7 @@
                   $_notification_status=$row['notification_status'];
                   $_occupant_status=$row['occupant_status'];
                   
-                  $tp_title=$row['title'];
-
-                  $retrieve_this_tenant = "select * from tenants where tenant_id='".$_tenant_id."'";
-                  $rtt_result = $con->query($retrieve_this_tenant);
-                  while($row = $rtt_result->fetch_assoc())
-                  {
-                    $_id=$row['id'];
-                  }
+                  $tp_title=$row['property_title'];
 
                   if($_occupant_status == "1"){
                     $badge = "<span class='badge bg-success'>Active</span>";
