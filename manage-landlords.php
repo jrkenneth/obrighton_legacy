@@ -28,12 +28,12 @@
 		unset($_SESSION['new_landlord_temp_password'], $_SESSION['new_landlord_temp_landlord_id'], $_SESSION['new_landlord_temp_email'], $_SESSION['new_landlord_temp_name']);
 	} elseif(isset($_SESSION['reset_landlord_temp_password'])){
 		$show_landlord_temp_password_modal = true;
-		$landlord_temp_mode = 'reset';
+		$landlord_temp_mode = $_SESSION['reset_landlord_temp_mode'] ?? 'reset';
 		$landlord_temp_password = $_SESSION['reset_landlord_temp_password'];
 		$landlord_temp_landlord_id = $_SESSION['reset_landlord_temp_landlord_id'] ?? '';
 		$landlord_temp_email = $_SESSION['reset_landlord_temp_email'] ?? '';
 		$landlord_temp_name = $_SESSION['reset_landlord_temp_name'] ?? '';
-		unset($_SESSION['reset_landlord_temp_password'], $_SESSION['reset_landlord_temp_landlord_id'], $_SESSION['reset_landlord_temp_email'], $_SESSION['reset_landlord_temp_name']);
+		unset($_SESSION['reset_landlord_temp_password'], $_SESSION['reset_landlord_temp_mode'], $_SESSION['reset_landlord_temp_landlord_id'], $_SESSION['reset_landlord_temp_email'], $_SESSION['reset_landlord_temp_name']);
 	}
 ?>
 
@@ -49,6 +49,8 @@
 					<p class="mb-2">
 						<?php if($landlord_temp_mode === 'new'){ ?>
 							Share this temporary password with the new landlord. They will be forced to change it on first login.
+						<?php } elseif($landlord_temp_mode === 'validate'){ ?>
+							Landlord account has been validated. Share this temporary password so they can complete first login and set a new password.
 						<?php } else { ?>
 							Share this temporary password with the landlord. They will be forced to change it on their next login.
 						<?php } ?>
@@ -195,6 +197,8 @@
 																$_phone_number=$row['phone'];
 																$_email=$row['email'];
 																$_password_status=$row['password_status'];
+																$_has_login_account = (!empty($row['password']) && intval($_password_status) > 0);
+																$account_badge = $_has_login_account ? "" : " <span class='badge bg-warning text-dark'>Pending Validation</span>";
 																$_uploader_id=$row['uploader_id'];
 																
 																$get_open_tickets = "select * from tickets where person_id='".$_id."' and target='landlords' and status='0'";
@@ -209,7 +213,8 @@
 
 																$reset_landlord_menu_item = '';
 																if (Authorization::isAdmin()) {
-																	$reset_landlord_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_landlord_".$_id."' class='dropdown-item'>Reset Password</a>";
+																	$reset_action_label = $_has_login_account ? "Reset Password" : "Validate & Create Account";
+																	$reset_landlord_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_landlord_".$_id."' class='dropdown-item'>".$reset_action_label."</a>";
 																}
 
 																echo "
@@ -218,7 +223,7 @@
 																			<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'><span>".$_landlord_id."</span></a>
 																		</td>
 																		<td>
-																			<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'>".$_first_name." ".$_last_name."</a> &nbsp; ".$manage_request_link."	
+																			<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'>".$_first_name." ".$_last_name."</a>".$account_badge." &nbsp; ".$manage_request_link."	
 																		</td>
 																		<td>
 																			<div class='dropdown ms-auto text-end'>
@@ -248,7 +253,12 @@
 
 																$reset_target_id = $_id;
 																$reset_target = "Landlord: ".$_first_name." ".$_last_name;
-																$reset_message = "This will reset this landlord's password and force them to change it on their next login. Do you want to proceed?";
+																if($_has_login_account){
+																	$reset_message = "This will reset this landlord's password and force them to change it on their next login. Do you want to proceed?";
+																}else{
+																	$reset_message = "This landlord is pending validation and has no login credentials yet. Continue to validate and generate a temporary password now?";
+																}
+																$reset_submit_label = $_has_login_account ? "Reset Password" : "Validate & Create Account";
 																$reset_page = "manage-landlords";
 																if (Authorization::isAdmin()) {
 																	include("_include/modals/reset-landlord-password-modal.php");
@@ -274,6 +284,8 @@
 															$_phone_number=$row['phone'];
 															$_email=$row['email'];
 															$_password_status=$row['password_status'];
+															$_has_login_account = (!empty($row['password']) && intval($_password_status) > 0);
+															$account_badge = $_has_login_account ? "" : " <span class='badge bg-warning text-dark'>Pending Validation</span>";
 															$_uploader_id=$row['uploader_id'];
 															
 															$get_open_tickets = "select * from tickets where person_id='".$_id."' and target='landlords' and status='0'";
@@ -288,7 +300,8 @@
 
 															$reset_landlord_menu_item = '';
 															if (Authorization::isAdmin()) {
-																$reset_landlord_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_landlord_".$_id."' class='dropdown-item'>Reset Password</a>";
+																$reset_action_label = $_has_login_account ? "Reset Password" : "Validate & Create Account";
+																$reset_landlord_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_landlord_".$_id."' class='dropdown-item'>".$reset_action_label."</a>";
 															}
 
 															echo "
@@ -297,7 +310,7 @@
 																		<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'><span>".$_landlord_id."</span></a>
 																	</td>
 																	<td>
-																		<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'>".$_first_name." ".$_last_name."</a> &nbsp; ".$manage_request_link."	
+																		<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'>".$_first_name." ".$_last_name."</a>".$account_badge." &nbsp; ".$manage_request_link."	
 																	</td>
 																	<td>
 																		<div class='dropdown ms-auto text-end'>
@@ -327,7 +340,12 @@
 
 															$reset_target_id = $_id;
 															$reset_target = "Landlord: ".$_first_name." ".$_last_name;
-															$reset_message = "This will reset this landlord's password and force them to change it on their next login. Do you want to proceed?";
+															if($_has_login_account){
+																$reset_message = "This will reset this landlord's password and force them to change it on their next login. Do you want to proceed?";
+															}else{
+																$reset_message = "This landlord is pending validation and has no login credentials yet. Continue to validate and generate a temporary password now?";
+															}
+															$reset_submit_label = $_has_login_account ? "Reset Password" : "Validate & Create Account";
 															$reset_page = "manage-landlords";
 															if (Authorization::isAdmin()) {
 																include("_include/modals/reset-landlord-password-modal.php");
@@ -346,6 +364,8 @@
 														$_phone_number=$row['phone'];
 														$_email=$row['email'];
 														$_password_status=$row['password_status'];
+														$_has_login_account = (!empty($row['password']) && intval($_password_status) > 0);
+														$account_badge = $_has_login_account ? "" : " <span class='badge bg-warning text-dark'>Pending Validation</span>";
 														$_uploader_id=$row['uploader_id'];
 														
 														$get_open_tickets = "select * from tickets where person_id='".$_id."' and target='landlords' and status='0'";
@@ -360,7 +380,8 @@
 
 														$reset_landlord_menu_item = '';
 														if (Authorization::isAdmin()) {
-															$reset_landlord_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_landlord_".$_id."' class='dropdown-item'>Reset Password</a>";
+															$reset_action_label = $_has_login_account ? "Reset Password" : "Validate & Create Account";
+															$reset_landlord_menu_item = "<a type='button' data-bs-toggle='modal' data-bs-target='#exampleModalCenter_resetpass_landlord_".$_id."' class='dropdown-item'>".$reset_action_label."</a>";
 														}
 
 														echo "
@@ -369,7 +390,7 @@
 																	<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'><span>".$_landlord_id."</span></a>
 																</td>
 																<td>
-																	<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'>".$_first_name." ".$_last_name."</a> &nbsp; ".$manage_request_link."	
+																	<a style='color: #327da8; font-weight: bold;' href='view-details.php?id=".$_id."&view_target=landlords&source=manage-landlords'>".$_first_name." ".$_last_name."</a>".$account_badge." &nbsp; ".$manage_request_link."	
 																</td>
 																<td>
 																	<div class='dropdown ms-auto text-end'>
@@ -399,7 +420,12 @@
 
 														$reset_target_id = $_id;
 														$reset_target = "Landlord: ".$_first_name." ".$_last_name;
-														$reset_message = "This will reset this landlord's password and force them to change it on their next login. Do you want to proceed?";
+														if($_has_login_account){
+															$reset_message = "This will reset this landlord's password and force them to change it on their next login. Do you want to proceed?";
+														}else{
+															$reset_message = "This landlord is pending validation and has no login credentials yet. Continue to validate and generate a temporary password now?";
+														}
+														$reset_submit_label = $_has_login_account ? "Reset Password" : "Validate & Create Account";
 														$reset_page = "manage-landlords";
 														if (Authorization::isAdmin()) {
 															include("_include/modals/reset-landlord-password-modal.php");

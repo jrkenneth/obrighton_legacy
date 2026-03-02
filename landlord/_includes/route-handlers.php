@@ -58,7 +58,7 @@ require_once(__DIR__ . '/../../_include/CSRFProtection.php');
         if ($user === '' || $password === '') {
             $message = "<span class='text-danger'>Login attempt failed. Please enter your credentials.</span>";
         } else {
-            $stmt = $con->prepare("SELECT id, password, first_name FROM landlords WHERE landlord_id=? LIMIT 1");
+            $stmt = $con->prepare("SELECT id, password, first_name, password_status FROM landlords WHERE landlord_id=? LIMIT 1");
             $row = null;
             if ($stmt) {
                 $stmt->bind_param('s', $user);
@@ -72,8 +72,11 @@ require_once(__DIR__ . '/../../_include/CSRFProtection.php');
                 $id = (int)$row['id'];
                 $this_password = (string)($row['password'] ?? '');
                 $first_name = (string)($row['first_name'] ?? '');
+                $password_status = isset($row['password_status']) ? (int)$row['password_status'] : 0;
 
-                if ($this_password !== '' && password_verify($password, $this_password)) {
+                if ($this_password === '' || $password_status === 0) {
+                    $message = "<span class='text-danger'>Login attempt failed. Your account is pending admin validation. Please contact support.</span>";
+                } elseif (password_verify($password, $this_password)) {
                     if (session_status() === PHP_SESSION_ACTIVE) {
                         @session_regenerate_id(true);
                     }

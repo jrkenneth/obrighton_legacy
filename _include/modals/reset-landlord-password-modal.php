@@ -1,4 +1,5 @@
 <!-- Modal -->
+<?php $reset_submit_label = $reset_submit_label ?? 'Reset Password'; ?>
 <div class='modal fade' id='exampleModalCenter_resetpass_landlord_<?php echo $reset_target_id; ?>'>
     <div class='modal-dialog modal-dialog-centered' role='document'>
         <div class='modal-content'>
@@ -14,7 +15,7 @@
                 <form method='POST' action='<?php echo $reset_page; ?>.php' style='display: inline;'>
                     <?php echo CSRFProtection::tokenField(); ?>
                     <input type='hidden' name='reset_landlord_id' value='<?php echo (int)$reset_target_id; ?>'>
-                    <button type='submit' name='reset_landlord_password' class='btn btn-primary'>Reset Password</button>
+                    <button type='submit' name='reset_landlord_password' class='btn btn-primary'><?php echo htmlspecialchars($reset_submit_label, ENT_QUOTES, 'UTF-8'); ?></button>
                 </form>
             </div>
         </div>

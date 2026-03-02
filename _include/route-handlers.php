@@ -1,6 +1,9 @@
 <?php
 
 require_once(__DIR__ . '/CSRFProtection.php');
+require_once(__DIR__ . '/InputValidator.php');
+require_once(__DIR__ . '/Authorization.php');
+require_once(__DIR__ . '/AuditLog.php');
 
 if (!function_exists('ob_safe_redirect')) {
     function ob_safe_redirect(string $location): void
@@ -24,6 +27,19 @@ if (!function_exists('ob_table_exists')) {
         } catch (mysqli_sql_exception $e) {
             return false;
         }
+    }
+}
+
+if (!function_exists('ob_is_new_landlord_workflow')) {
+    function ob_is_new_landlord_workflow(array $payload = array()): bool
+    {
+        if (($payload['workflow_source'] ?? '') === 'new-landlord') {
+            return true;
+        }
+        if ((($_SESSION['new_landlord_workflow']['active'] ?? 0) === 1) && isset($_SERVER['HTTP_REFERER']) && strpos((string)$_SERVER['HTTP_REFERER'], 'new-landlord.php') !== false) {
+            return true;
+        }
+        return false;
     }
 }
 
@@ -865,7 +881,7 @@ if (!function_exists('ob_table_exists')) {
             exit;
         }
 
-        $stmt = $con->prepare("SELECT id, landlord_id, first_name, last_name, email, password_status FROM landlords WHERE id=? LIMIT 1");
+        $stmt = $con->prepare("SELECT id, landlord_id, first_name, last_name, email, password, password_status FROM landlords WHERE id=? LIMIT 1");
         if ($stmt === false) {
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Password reset failed. Try again later.';
@@ -886,6 +902,9 @@ if (!function_exists('ob_table_exists')) {
             echo "<script>window.location='".$redirect_to."';</script>";
             exit;
         }
+
+        $previous_password_status = isset($landlord_row['password_status']) ? (int)$landlord_row['password_status'] : 0;
+        $had_login_account = (!empty($landlord_row['password']) && $previous_password_status > 0);
 
         $temp_password_plain = generateTempPassword(10);
         $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
@@ -911,22 +930,27 @@ if (!function_exists('ob_table_exists')) {
         }
 
         AuditLog::log('UPDATE', 'landlords', (int)$target_id, array(
-            'action' => 'password_reset',
-            'password_status' => isset($landlord_row['password_status']) ? (int)$landlord_row['password_status'] : null,
+            'action' => $had_login_account ? 'password_reset' : 'validate_and_create_account',
+            'password_status' => $previous_password_status,
             'timestamp' => date('Y-m-d H:i:s')
         ), array(
-            'action' => 'password_reset',
+            'action' => $had_login_account ? 'password_reset' : 'validate_and_create_account',
             'password_status' => 1,
             'timestamp' => date('Y-m-d H:i:s')
         ), (int)$this_user);
 
         $_SESSION['reset_landlord_temp_password'] = $temp_password_plain;
+        $_SESSION['reset_landlord_temp_mode'] = $had_login_account ? 'reset' : 'validate';
         $_SESSION['reset_landlord_temp_landlord_id'] = $landlord_row['landlord_id'] ?? '';
         $_SESSION['reset_landlord_temp_email'] = $landlord_row['email'] ?? '';
         $_SESSION['reset_landlord_temp_name'] = trim(($landlord_row['first_name'] ?? '') . ' ' . ($landlord_row['last_name'] ?? ''));
 
         $_SESSION['response'] = 'success';
-        $_SESSION['message'] = 'Password reset successfully. Copy the temporary password and share it with the landlord.';
+        if($had_login_account){
+            $_SESSION['message'] = 'Password reset successfully. Copy the temporary password and share it with the landlord.';
+        }else{
+            $_SESSION['message'] = 'Landlord account validated. Copy the temporary password and share it with the landlord.';
+        }
         $_SESSION['expire'] = time() + 10;
         echo "<script>window.location='".$redirect_to."';</script>";
         exit;
@@ -1261,23 +1285,37 @@ if (!function_exists('ob_table_exists')) {
 
     //add new landlord
     if(isset($_POST['submit_new_landlord']) || isset($_POST['submit_landlord_add_property'])){
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '', 'Invalid request. Please refresh the page and try again.');
+
         $first_name = InputValidator::sanitizeText($_POST['first_name'] ?? '');
         $last_name = InputValidator::sanitizeText($_POST['last_name'] ?? '');
         $email_address = InputValidator::sanitizeText($_POST['email_address'] ?? '');
         $contact_number = InputValidator::sanitizeText($_POST['contact_number'] ?? '');	
         $uploader = intval($_POST['uploader'] ?? 0);	
+        $from_new_landlord = ob_is_new_landlord_workflow($_POST);
 
-        // Generate a temporary password for the landlord (admin shares this with the landlord)
-        $temp_password_plain = generateTempPassword(10);
-        $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
+        $temp_password_plain = '';
+        $temp_password_hash = '';
+        $password_status = 0;
+        if(!$from_new_landlord){
+            // Admin flow: create a temporary password immediately.
+            $temp_password_plain = generateTempPassword(10);
+            $temp_password_hash = password_hash($temp_password_plain, PASSWORD_DEFAULT);
+            $password_status = 1;
+        }
 
-        // password_status: 1 = admin-set/default (temporary; must change)
-        $password_status = 1;
-
-        // PHASE 5: Use prepared statement for INSERT
-        $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, password, password_status, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        // New-landlord workflow: create landlord profile only (no login credentials yet).
+        if($from_new_landlord){
+            $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, password, password_status, uploader_id) VALUES (?, ?, ?, ?, NULL, 0, ?)");
+        }else{
+            $stmt = $con->prepare("INSERT INTO landlords(first_name, last_name, phone, email, password, password_status, uploader_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        }
         if($stmt !== false){
-            $stmt->bind_param("sssssii", $first_name, $last_name, $contact_number, $email_address, $temp_password_hash, $password_status, $uploader);
+            if($from_new_landlord){
+                $stmt->bind_param("ssssi", $first_name, $last_name, $contact_number, $email_address, $uploader);
+            }else{
+                $stmt->bind_param("sssssii", $first_name, $last_name, $contact_number, $email_address, $temp_password_hash, $password_status, $uploader);
+            }
             if($stmt->execute()){
                 $inserted_id = $stmt->insert_id;
                 $stmt->close();
@@ -1292,16 +1330,22 @@ if (!function_exists('ob_table_exists')) {
                 $update_stmt->close();
                 
                 // PHASE 5: Log landlord creation
-                AuditLog::log('INSERT', 'landlords', $inserted_id, null, array('landlord_id' => $landlord_id, 'email' => $email_address, 'timestamp' => date('Y-m-d H:i:s')), $uploader);
+                AuditLog::log('INSERT', 'landlords', $inserted_id, null, array('landlord_id' => $landlord_id, 'email' => $email_address, 'password_status' => $password_status, 'timestamp' => date('Y-m-d H:i:s')), $uploader);
 
-                // Store temp password for admin modal (never store plaintext in DB/audit)
-                $_SESSION['new_landlord_temp_password'] = $temp_password_plain;
-                $_SESSION['new_landlord_temp_landlord_id'] = $landlord_id;
-                $_SESSION['new_landlord_temp_email'] = $email_address;
-                $_SESSION['new_landlord_temp_name'] = trim($first_name . ' ' . $last_name);
+                if(!$from_new_landlord){
+                    // Store temp password for admin modal (never store plaintext in DB/audit)
+                    $_SESSION['new_landlord_temp_password'] = $temp_password_plain;
+                    $_SESSION['new_landlord_temp_landlord_id'] = $landlord_id;
+                    $_SESSION['new_landlord_temp_email'] = $email_address;
+                    $_SESSION['new_landlord_temp_name'] = trim($first_name . ' ' . $last_name);
+                }
 
                 $response = "success";
-                $message = "New landlord listed successfully.";
+                if($from_new_landlord){
+                    $message = "Landlord profile created.";
+                }else{
+                    $message = "New landlord listed successfully.";
+                }
                 $_SESSION['response'] = $response;
                 $_SESSION['message'] = $message;
             
@@ -1309,10 +1353,9 @@ if (!function_exists('ob_table_exists')) {
                 $_SESSION['expire'] = time() + $res_sess_duration;
             
                 if(isset($_POST['submit_new_landlord'])){
-                    // Check if request came from new-landlord.php workflow
-                    $from_new_landlord = (isset($_SESSION['nl_focus']) && isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'new-landlord.php') !== false);
-                    
                     if($from_new_landlord){
+                        $_SESSION['new_landlord_workflow']['active'] = 1;
+                        $_SESSION['new_landlord_workflow']['landlord_id'] = $inserted_id;
                         $redirect_url = "new-landlord.php?landlord-id=".$inserted_id;
                     }else{
                         // Redirect back to manage-landlords to show temp password modal
@@ -1397,6 +1440,12 @@ if (!function_exists('ob_table_exists')) {
         error_log('ADD_PROPERTY: CSRF token present: ' . (isset($_POST['csrf_token']) ? 'yes' : 'no'));
         
         CSRFProtection::checkToken($_POST['csrf_token'] ?? '', 'Invalid request. Please refresh the page and try again.');
+        $from_new_landlord = ob_is_new_landlord_workflow($_POST);
+        $workflow_landlord_id = (int)($_POST['workflow_landlord_id'] ?? 0);
+        $property_flow_redirect = "manage-properties.php";
+        if($from_new_landlord && $workflow_landlord_id > 0){
+            $property_flow_redirect = "new-landlord.php?landlord-id=".$workflow_landlord_id;
+        }
 
         $title = (string)($_POST['title'] ?? '');
         $description =(string)($_POST['description'] ?? '');
@@ -1427,7 +1476,7 @@ if (!function_exists('ob_table_exists')) {
                 $_SESSION['response'] = 'error';
                 $_SESSION['message'] = 'Please select a landlord.';
                 $_SESSION['expire'] = time() + 10;
-                echo "<script>window.location='manage-properties.php';</script>";
+                echo "<script>window.location='".$property_flow_redirect."';</script>";
                 exit;
             }
         }elseif($landlord_input_type === "new"){
@@ -1440,7 +1489,7 @@ if (!function_exists('ob_table_exists')) {
                 $_SESSION['response'] = 'error';
                 $_SESSION['message'] = 'Please fill in the new landlord details (first name, last name, contact number).';
                 $_SESSION['expire'] = time() + 10;
-                echo "<script>window.location='manage-properties.php';</script>";
+                echo "<script>window.location='".$property_flow_redirect."';</script>";
                 exit;
             }
           
@@ -1477,14 +1526,14 @@ if (!function_exists('ob_table_exists')) {
                 $_SESSION['response'] = 'error';
                 $_SESSION['message'] = 'Could not create the new landlord. Please try again or contact support.';
                 $_SESSION['expire'] = time() + 10;
-                echo "<script>window.location='manage-properties.php';</script>";
+                echo "<script>window.location='".$property_flow_redirect."';</script>";
                 exit;
             }
         }else{
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Please select landlord option (existing/new).';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='manage-properties.php';</script>";
+            echo "<script>window.location='".$property_flow_redirect."';</script>";
             exit;
         }
 
@@ -1494,7 +1543,7 @@ if (!function_exists('ob_table_exists')) {
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Landlord is required to create a property.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='manage-properties.php';</script>";
+            echo "<script>window.location='".$property_flow_redirect."';</script>";
             exit;
         }
 
@@ -1528,23 +1577,18 @@ if (!function_exists('ob_table_exists')) {
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
                 
-                // Determine redirect based on where the request came from
-                $from_new_landlord = (isset($_SESSION['nl_focus']) && isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'new-landlord.php') !== false);
-                
                 if(isset($_POST['submit_new_property'])){
                     if($from_new_landlord){
-                        // Clear the workflow session flag when done
-                        unset($_SESSION['nl_focus']);
+                        $_SESSION['new_landlord_workflow']['active'] = 1;
+                        $_SESSION['new_landlord_workflow']['landlord_id'] = $landlord;
                         echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."';</script>";
                     }else{
                         echo "<script>window.location='manage-properties.php';</script>";
                     }
                 }elseif(isset($_POST['submit_property_add_tenants'])){
-                    // Clear workflow flag regardless (user chose to add tenants instead)
-                    if(isset($_SESSION['nl_focus'])){
-                        unset($_SESSION['nl_focus']);
-                    }
                     if($from_new_landlord){
+                        $_SESSION['new_landlord_workflow']['active'] = 1;
+                        $_SESSION['new_landlord_workflow']['landlord_id'] = $landlord;
                         echo "<script>window.location='new-landlord.php?landlord-id=".$landlord."&new-tenant=true';</script>";
                     }else{
                         echo "<script>window.location='manage-tenants.php?add-tenant=true&property-id=".$inserted_id."';</script>";
@@ -1562,7 +1606,7 @@ if (!function_exists('ob_table_exists')) {
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Could not add property. Please confirm all required fields and try again.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='manage-properties.php';</script>";
+            echo "<script>window.location='".$property_flow_redirect."';</script>";
             exit;
         }
     }
@@ -1621,6 +1665,14 @@ if (!function_exists('ob_table_exists')) {
 
     //add new tenant
     if(isset($_POST['submit_new_tenant'])){
+        CSRFProtection::checkToken($_POST['csrf_token'] ?? '', 'Invalid request. Please refresh the page and try again.');
+        $from_new_landlord = ob_is_new_landlord_workflow($_POST);
+        $workflow_landlord_id = (int)($_POST['workflow_landlord_id'] ?? 0);
+        $tenant_flow_redirect = "manage-tenants.php";
+        if($from_new_landlord && $workflow_landlord_id > 0){
+            $tenant_flow_redirect = "new-landlord.php?landlord-id=".$workflow_landlord_id."&new-tenant=true";
+        }
+
         $property = $_POST['property'];
         $firstname = $_POST['firstname'];
         $lastname =$_POST['lastname'];
@@ -1745,7 +1797,7 @@ if (!function_exists('ob_table_exists')) {
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Invalid Last Payment Date. Please use a valid date format.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='manage-tenants.php';</script>";
+            echo "<script>window.location='".$tenant_flow_redirect."';</script>";
             exit;
         }
 
@@ -1753,7 +1805,7 @@ if (!function_exists('ob_table_exists')) {
             $_SESSION['response'] = 'error';
             $_SESSION['message'] = 'Invalid Next Payment Date. Please use a valid date format.';
             $_SESSION['expire'] = time() + 10;
-            echo "<script>window.location='manage-tenants.php';</script>";
+            echo "<script>window.location='".$tenant_flow_redirect."';</script>";
             exit;
         }
 
@@ -1830,7 +1882,7 @@ if (!function_exists('ob_table_exists')) {
                     $_SESSION['response'] = 'error';
                     $_SESSION['message'] = 'Tenant added but payment history failed. Invalid date format. Please check Last Payment Date and Next Payment Date.';
                     $_SESSION['expire'] = time() + 10;
-                    echo "<script>window.location='manage-tenants.php';</script>";
+                    echo "<script>window.location='".$tenant_flow_redirect."';</script>";
                     exit;
                 }
 
@@ -1843,22 +1895,20 @@ if (!function_exists('ob_table_exists')) {
                 $res_sess_duration = 5;
                 $_SESSION['expire'] = time() + $res_sess_duration;
             
-                // Check if request came from new-landlord.php workflow
-                $from_new_landlord = (isset($_SESSION['nl_focus']) && isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'new-landlord.php') !== false);
-                
                 if($from_new_landlord){
-                    $retrieve_all_properties = "select * from properties where id='".$property."'";
-                    $rap_result = $con->query($retrieve_all_properties);
-                    while($row = $rap_result->fetch_assoc())
-                    {
-                        $_landlord_id=$row['landlord_id'];
+                    if($workflow_landlord_id <= 0){
+                        $retrieve_all_properties = "select * from properties where id='".$property."'";
+                        $rap_result = $con->query($retrieve_all_properties);
+                        while($row = $rap_result->fetch_assoc())
+                        {
+                            $workflow_landlord_id = (int)$row['landlord_id'];
+                        }
                     }
 
-                    // Clear workflow flag when done
-                    unset($_SESSION['nl_focus']);
-                    
                     // Use server-side redirect to show temp password modal
-                    $redirect_url = "new-landlord.php?landlord-id=".$_landlord_id."&new-tenant=true";
+                    $_SESSION['new_landlord_workflow']['active'] = 1;
+                    $_SESSION['new_landlord_workflow']['landlord_id'] = $workflow_landlord_id;
+                    $redirect_url = "new-landlord.php?landlord-id=".$workflow_landlord_id."&new-tenant=true";
                     if (!headers_sent()) {
                         header("Location: {$redirect_url}");
                         exit;

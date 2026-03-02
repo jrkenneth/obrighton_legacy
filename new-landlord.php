@@ -4,7 +4,15 @@
 
 	//global
 	$this_user = "";
-	$_SESSION['nl_focus'] = "landlord";
+	if(!isset($_SESSION['new_landlord_workflow']) || !is_array($_SESSION['new_landlord_workflow'])){
+		$_SESSION['new_landlord_workflow'] = array();
+	}
+	$_SESSION['new_landlord_workflow']['active'] = 1;
+	if(isset($_GET['landlord-id'])){
+		$_SESSION['new_landlord_workflow']['landlord_id'] = (int)$_GET['landlord-id'];
+	}else{
+		unset($_SESSION['new_landlord_workflow']['landlord_id']);
+	}
 
 	//landlord form
 	$first_name = "";
@@ -84,8 +92,8 @@
                 <div class="col-xl-4 col-lg-4">
 					<div class="pages-left h-100">
 						<div class="login-content" style="padding-top: 50px;padding-bottom: 50px;">
-							<a href="index.php"><img src="images/logo-full.png" class="mb-3 logo-dark" alt=""></a>
-							<a href="index.php"><img src="images/logi-white.png" class="mb-3 logo-light" alt=""></a>
+							<a href="index.php"><img src="images/logo-full.png" style="width: 200px;" class="mb-3 logo-dark" alt=""></a>
+							<a href="index.php"><img src="images/logi-white.png" style="width: 200px;" class="mb-3 logo-light" alt=""></a>
 							<br><br><br>
 							<p>Landlord Registration Form</p>
 							<?php
@@ -149,6 +157,9 @@
 						</div>
 						<hr>
 						<form method="POST">
+							<?php CSRFProtection::tokenField(); ?>
+							<input type="hidden" name="workflow_source" value="new-landlord">
+							<input type="hidden" name="workflow_landlord_id" value="<?php echo (int)($_GET['landlord-id'] ?? 0); ?>">
 							<div class="row">
 								<div class="col-xl-12 mb-3">
 									<label class="form-label">Property<span class="text-danger">*</span></label>
@@ -345,6 +356,9 @@
 						</div>
 						<hr>
 						<form method="POST">
+							<?php CSRFProtection::tokenField(); ?>
+							<input type="hidden" name="workflow_source" value="new-landlord">
+							<input type="hidden" name="workflow_landlord_id" value="<?php echo (int)($_GET['landlord-id'] ?? 0); ?>">
 							<div class="row">
 								<div class="col-xl-12 mb-3">
 									<label for="title" class="form-label">Title (Name of Property)<span class="text-danger">*</span></label>
@@ -443,6 +457,8 @@
 						</div>
 						<hr>
 						<form method="POST">
+							<?php CSRFProtection::tokenField(); ?>
+							<input type="hidden" name="workflow_source" value="new-landlord">
 							<div class="mb-4">
 								<label for="first_name" class="form-label">First Name<span class="text-danger">*</span></label>
 								<input type="text" name="first_name" value="<?php echo $first_name; ?>" class="form-control" id="first_name" placeholder="" required>

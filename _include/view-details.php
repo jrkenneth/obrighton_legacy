@@ -1,4 +1,7 @@
 <?php
+    // Some records (e.g. created from public workflow) may not have a matching admin uploader.
+    $this_uploader = "<span class='badge badge-secondary light border-0'>System / Pending Validation</span>";
+
     if($target_name == "landlords"){
         $landlord = $target_id;
         $title = "";
