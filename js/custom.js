@@ -11,8 +11,116 @@ var W3Crm = function(){
 			jQuery('.hamburger').removeClass('is-active');
 		}
 	}
-	
-	
+
+	var handleGlobalModalStacking = function() {
+		var isolatedElements = [];
+
+		function enableStrictIsolation() {
+			isolatedElements = [];
+			Array.prototype.forEach.call(document.body.children, function(childEl) {
+				if (!childEl || !childEl.classList) {
+					return;
+				}
+
+				if (childEl.classList.contains('modal') || childEl.classList.contains('modal-backdrop')) {
+					return;
+				}
+
+				isolatedElements.push({
+					element: childEl,
+					previousPointerEvents: childEl.style.pointerEvents
+				});
+				childEl.style.pointerEvents = 'none';
+			});
+		}
+
+		function disableStrictIsolation() {
+			isolatedElements.forEach(function(entry) {
+				if (!entry || !entry.element) {
+					return;
+				}
+				entry.element.style.pointerEvents = entry.previousPointerEvents || '';
+			});
+			isolatedElements = [];
+		}
+
+		document.addEventListener('show.bs.modal', function(event) {
+			var modalEl = event.target;
+			if (!modalEl || !modalEl.classList || !modalEl.classList.contains('modal')) {
+				return;
+			}
+
+			document.querySelectorAll('.dropdown-menu.show').forEach(function(menuEl) {
+				menuEl.classList.remove('show');
+			});
+
+			document.querySelectorAll('[data-bs-toggle="dropdown"][aria-expanded="true"]').forEach(function(toggleEl) {
+				toggleEl.setAttribute('aria-expanded', 'false');
+			});
+
+			document.querySelectorAll('.sidebar-right.show, .dz-demo-panel.show, .chatbox.active').forEach(function(panelEl) {
+				panelEl.classList.remove('show');
+				panelEl.classList.remove('active');
+			});
+
+			var preloaderEl = document.getElementById('preloader');
+			if (preloaderEl) {
+				preloaderEl.style.display = 'none';
+				preloaderEl.style.pointerEvents = 'none';
+			}
+
+			if (modalEl.parentNode !== document.body) {
+				document.body.appendChild(modalEl);
+			}
+
+			document.body.classList.add('ob-modal-isolated');
+			enableStrictIsolation();
+			modalEl.style.zIndex = '200000';
+
+			var backdrops = document.querySelectorAll('.modal-backdrop');
+			if (backdrops.length > 1) {
+				for (var index = 0; index < backdrops.length - 1; index++) {
+					backdrops[index].remove();
+				}
+			}
+
+			setTimeout(function() {
+				var visibleBackdrops = document.querySelectorAll('.modal-backdrop');
+				if (visibleBackdrops.length > 0) {
+					visibleBackdrops[visibleBackdrops.length - 1].style.zIndex = '199999';
+				}
+			}, 0);
+		});
+
+		document.addEventListener('shown.bs.modal', function(event) {
+			var modalEl = event.target;
+			if (!modalEl || !modalEl.classList || !modalEl.classList.contains('modal')) {
+				return;
+			}
+
+			modalEl.style.zIndex = '200000';
+			var visibleBackdrops = document.querySelectorAll('.modal-backdrop');
+			if (visibleBackdrops.length > 0) {
+				visibleBackdrops[visibleBackdrops.length - 1].style.zIndex = '199999';
+			}
+		});
+
+		document.addEventListener('hidden.bs.modal', function() {
+			if (document.querySelector('.modal.show')) {
+				return;
+			}
+
+			document.querySelectorAll('.modal-backdrop').forEach(function(backdropEl) {
+				backdropEl.remove();
+			});
+
+			document.body.classList.remove('ob-modal-isolated');
+			disableStrictIsolation();
+			document.body.classList.remove('modal-open');
+			document.body.style.removeProperty('padding-right');
+		});
+	}
+
 	var handleSelectPicker = function(){
 		if(jQuery('.default-select,.table-responsive select').length > 0 ){
 			jQuery('.default-select,.table-responsive select').selectpicker();
@@ -651,6 +759,8 @@ var W3Crm = function(){
 	/* Function ============ */
 	return {
 		init:function(){
+			document.documentElement.setAttribute('data-ob-customjs', '1');
+			handleGlobalModalStacking();
 			handleMetisMenu();
 			handleAllChecked();
 			handleNavigation();

@@ -23,6 +23,12 @@ if(isset($_GET['q'])){
 	<meta name="robots" content="">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="description" content="">
+	<?php
+		$style_version = @filemtime(__DIR__ . '/../css/style.css');
+		$brand_style_version = @filemtime(__DIR__ . '/../css/obe-brand.css');
+		if(!$style_version){ $style_version = time(); }
+		if(!$brand_style_version){ $brand_style_version = $style_version; }
+	?>
 	
 	<!-- PAGE TITLE HERE -->
 	<title>O.BRIGHTON EMPIRE LIMITED - <?php echo $page_title; ?></title>
@@ -42,8 +48,8 @@ if(isset($_GET['q'])){
 	<link href="vendor/tagify/dist/tagify.css" rel="stylesheet">
 	
 	<!-- Style css -->
-    <link href="css/style.css" rel="stylesheet">
-	<link href="css/obe-brand.css" rel="stylesheet">
+	<link href="css/style.css?v=<?php echo $style_version; ?>" rel="stylesheet">
+	<link href="css/obe-brand.css?v=<?php echo $brand_style_version; ?>" rel="stylesheet">
 	
 	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 

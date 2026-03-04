@@ -29056,7 +29056,10 @@ code {
   border-radius: 0.375rem; }
 
 .modal-backdrop {
-  z-index: 10 !important; }
+  z-index: 1050 !important; }
+
+.modal {
+  z-index: 1055 !important; }
 
 .modal-dialog-center {
   min-height: calc(100% - 3.5rem);

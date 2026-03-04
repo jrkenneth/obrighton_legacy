@@ -402,3 +402,26 @@ body:not([data-layout]) .dashboard_header {
 body:not([data-layout]) .mobilie_header_nav .header {
   box-shadow: 0 10px 18px -16px rgba(var(--obe-primary-rgb), 0.75) !important;
 }
+
+/* Prevent theme overlays from capturing taps while Bootstrap modal is open (real mobile browsers) */
+body.modal-open .sidebar-right,
+body.modal-open .sidebar-right .bg-overlay,
+body.modal-open .dz-demo-panel,
+body.modal-open .dz-demo-panel .bg-close,
+body.modal-open .chatbox {
+  pointer-events: none !important;
+}
+
+body.ob-modal-isolated #main-wrapper,
+body.modal-open #main-wrapper {
+  pointer-events: none !important;
+}
+
+body.modal-open .modal,
+body.modal-open .modal *,
+body.modal-open .modal-backdrop,
+body.ob-modal-isolated .modal,
+body.ob-modal-isolated .modal *,
+body.ob-modal-isolated .modal-backdrop {
+  pointer-events: auto;
+}

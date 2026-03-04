@@ -51,7 +51,8 @@
     <script src="vendor/jvmap/jquery.vmap.world.js"></script>
     <script src="vendor/jvmap/jquery.vmap.usa.js"></script>
     <script src="js/dzsettings.js"></script>
-    <script src="js/custom.js"></script>
+    <?php $custom_js_version = @filemtime(__DIR__ . '/../js/custom.js'); if(!$custom_js_version){ $custom_js_version = time(); } ?>
+    <script src="js/custom.js?v=<?php echo $custom_js_version; ?>"></script>
 	<script src="js/deznav-init.js"></script>
 	<script src="js/demo.js"></script>
 	
